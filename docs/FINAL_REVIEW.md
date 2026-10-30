@@ -103,18 +103,19 @@ long-duration hostile-load/RSS ceiling measurement.
 
 ## Ownership and dependency review
 
-[LICENSE.txt](../LICENSE.txt) is unchanged. No open-source license, ownership
-assignment or new demo-use permission was automatically applied. The owner retains
-rights to original code; upstream MIT/BSD permissions and attribution obligations
-remain independent. [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) contains the
-pinned runtime inventory and unchanged upstream license/patent texts.
+Following the owner's explicit licensing clarification, [LICENSE.txt](../LICENSE.txt)
+reserves original-code rights while granting limited viewing, cloning, building,
+testing and local execution for personal technical evaluation and recruitment/
+hiring review. Commercial employers may review the work; commercial redistribution,
+production use and general modification rights are not granted. The source is
+publicly viewable and remains proprietary, not open source.
 
-The current original-code license says "confidential" and forbids use/copy/modify
-without permission while describing evaluation/demo availability. Decide whether
-to remove that word, clarify original-code versus third-party ownership and grant
-a narrow build/run evaluation permission. These wording decisions do not require
-open-sourcing the original code. They do not block public code review under the
-current notice, but demo instructions assume author permission.
+Upstream MIT/BSD permissions and attribution obligations remain independent.
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) contains the pinned runtime
+inventory, unchanged license/patent texts and the custom-license points recommended
+for professional legal review. No ownership assignment or engineering change is
+part of this licensing follow-up. The protocol remains experimental and has not
+been independently security-audited.
 
 No dependency source or executable release is shipped. A future binary release
 must include the MIT/BSD notices and assess actual platform/toolchain libraries:

@@ -70,17 +70,36 @@ BoringSSL/OpenSSL/ISC notices; the ordinary Go notice alone is not a complete
 inventory for that build. No Go distribution or verification-tool bundle is
 being released here.
 
-## Original-code license wording still for the owner to decide
+## Original-code evaluation permission
 
-[LICENSE.txt](LICENSE.txt) remains unchanged and reserves rights; the repository
-is publicly viewable, not open source. Its word **"confidential"** conflicts with
-the public presentation. Its broad prohibition on use/copy/modify also leaves
-public visitors' permission to build/run the documented demo unclear, despite
-saying the software is provided for evaluation/review/demonstration.
+[LICENSE.txt](LICENSE.txt) now expressly permits viewing, cloning, building,
+testing and local execution for personal technical evaluation or recruitment/
+hiring review. A commercial employer may conduct that review, but receives no
+automatic permission for commercial redistribution, production use, product/
+service integration or general source modification. Original-code ownership
+and all ungranted rights remain reserved.
 
-The owner should decide whether to remove that word, explicitly limit the
-exclusive-ownership wording to original code, and grant a narrow evaluation/demo
-permission. None of those decisions requires choosing an open-source license.
-No new permission grant, title assignment, public-access change or legal-term
-rewrite was made during this review. GitHub's hosting terms and third-party
-licenses operate independently of the original-code notice.
+These conditions govern the Original Materials defined in that notice, not the
+upstream components. All upstream license and patent texts listed above remain
+unchanged. The experimental protocol is not independently security-audited.
+
+## Custom-license review notes
+
+This is a proposed custom proprietary evaluation permission in PR #1, not a
+standard open-source license or a professional legal opinion. Qualified counsel
+should review it before reliance for enforcement or commercial licensing,
+particularly:
+
+- The boundary between permitted personal/recruitment evaluation and prohibited
+  production use, product integration or external redistribution, including
+  organizational review and local build outputs.
+- Compatibility with mandatory legal rights and GitHub's applicable hosting/fork
+  terms; the notice preserves rights recipients independently have.
+- The scope of original-code ownership versus third-party rights, and the
+  warranty/liability wording under the applicable jurisdiction.
+- Any future binary release, bundled-library obligations or separately negotiated
+  commercial permissions. No such distribution right is granted by this change.
+
+No jurisdiction, assignment of ownership, broad modification permission or
+open-source grant was selected. The rights reservation is limited to original
+materials; upstream MIT/BSD permissions continue independently.

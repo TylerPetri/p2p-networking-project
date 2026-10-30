@@ -198,11 +198,16 @@ go test ./internal/crypto/channel -run '^$' -fuzz '^FuzzChannelDecrypt$' -fuzzti
 
 ## License
 
-Copyright © 2026 Tyler Petri. All rights reserved. This is source available for
-portfolio evaluation under the existing [LICENSE.txt](LICENSE.txt), not an
-open-source license. The license terms remain unchanged. The current wording
-calls the source "confidential" and leaves public demo execution permission
-unclear; running the instructions assumes author permission. See
-[third-party notices and owner decisions](THIRD_PARTY_NOTICES.md) for the pinned
-MIT/BSD dependencies and release-attribution requirements. Those upstream
-licenses do not require making the original code open source.
+Copyright © 2026 Tyler Petri. Rights to the original implementation are reserved
+under [LICENSE.txt](LICENSE.txt); this is not an open-source license. You may
+clone, build, run tests and execute the project locally for personal technical
+evaluation or recruitment/hiring review, including review by a commercial
+employer. That limited permission does not grant production use, commercial
+redistribution or general modification rights.
+
+[Third-party notices](THIRD_PARTY_NOTICES.md) preserve the independent MIT/BSD
+terms and attribution requirements of upstream components. The original-code
+permission does not restrict rights those licenses grant. The protocol remains
+experimental and has not been independently security-audited. See the
+[custom-license review notes](THIRD_PARTY_NOTICES.md#custom-license-review-notes)
+for the points recommended for professional legal review.

@@ -159,8 +159,10 @@ Recommend merging for an **experimental engineering portfolio** only after revie
 and green CI for the final head. This is a merge recommendation, not authorization
 to perform a merge. There is still **NO-GO for production, sensitive communication,
 unrestricted hostile-network service or independently audited-security claims**.
-The public-portfolio license wording remains the owner's decision; no license,
-visibility or repository metadata setting was changed.
+No license, visibility or repository metadata setting was changed in Pass 2.
+The owner subsequently authorized the limited local evaluation/recruitment
+permission in the current LICENSE.txt; the original implementation remains
+proprietary, not open source.
 
 Suggested GitHub description:
 

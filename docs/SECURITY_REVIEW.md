@@ -167,9 +167,9 @@ exposed elsewhere, revoke it regardless of this clean scan.
 **NO-GO for endorsing the current default-branch snapshot as a security-ready
 portfolio release.** Review this PR and explicitly accept/document the remaining
 availability and discovery risks before selecting a portfolio revision. The
-license also describes the source as confidential while allowing evaluation;
-confirm the intended public-portfolio terms with the owner without assuming it is
-open source. License text is preserved.
+original license wording required clarification. The owner has since authorized
+a limited local evaluation/recruitment permission; see the current LICENSE.txt.
+The original implementation remains proprietary, not open source.
 
 The proposed branch is suitable for engineering review and a disposable localhost
 demonstration, with the limitations prominently disclosed. It is **NO-GO for
