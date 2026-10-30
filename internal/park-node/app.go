@@ -112,15 +112,17 @@ func (a *App) Start() error {
 		return err
 	}
 
-	lanCfg := discovery.DefaultLANConfig()
+	if !a.cfg.DisableLAN {
+		lanCfg := discovery.DefaultLANConfig()
 
-	if err := discovery.StartLANResponder(a.stopLAN, lanCfg, string(a.Node.ListenAddr()), a.Node.Name()); err != nil {
-		a.logf("LAN responder failed: %v", err)
+		if err := discovery.StartLANResponder(a.stopLAN, lanCfg, string(a.Node.ListenAddr()), a.Node.Name()); err != nil {
+			a.logf("LAN responder failed: %v", err)
+		}
+
+		ps := discovery.NewPeerStore(discovery.DefaultPeerStorePath())
+		mgr := discovery.NewManager(ps, lanCfg)
+		mgr.Run(a.Node)
 	}
-
-	ps := discovery.NewPeerStore(discovery.DefaultPeerStorePath())
-	mgr := discovery.NewManager(ps, lanCfg)
-	mgr.Run(a.Node)
 
 	// Broadcast initial signed points snapshot
 	if snap, err := a.Points.SnapshotSelf(); err == nil {

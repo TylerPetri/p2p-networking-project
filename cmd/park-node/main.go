@@ -14,6 +14,7 @@ import (
 )
 
 func main() {
+	lan := flag.Bool("lan", true, "enable LAN discovery/responder (disable for isolated localhost demo)")
 	name := flag.String("name", "anon", "display name")
 	bind := flag.String("bind", ":0", "bind address (e.g. :0 for random port)")
 	seed := flag.Bool("seed", false, "run as SeedNode (rendezvous/relay)")
@@ -36,6 +37,7 @@ func main() {
 
 	app, err := parknode.New(parknode.Config{
 		DataDir:    *dataDir,
+		DisableLAN: !*lan,
 		Name:       *name,
 		Bind:       *bind,
 		IsSeed:     *seed,
@@ -45,6 +47,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("create app: %v", err)
 	}
+
+	defer app.StopAll()
 
 	if err := app.Start(); err != nil {
 		log.Fatalf("start app: %v", err)
