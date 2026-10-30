@@ -1,5 +1,8 @@
 # Engineering security review — 2026-10-30
 
+Historical Pass 1 findings and test evidence. [Pass 2](PASS2_REVIEW.md) supersedes
+the remaining-limitations and publication recommendations below.
+
 This is a source review and targeted testing effort, not an independent security
 assessment or a completed security audit. Baseline: commit
 `3750f897c38bf1ceacd256d66f52041e939bffc8`.

@@ -17,9 +17,13 @@ jobs:
         with:
           go-version: '1.27.x'
       - run: go vet ./...
+      - run: go test -count=1 ./...
       - run: go test -race -count=1 ./...
       - run: go test -race -count=20 ./internal/crypto/noiseconn ./internal/dht ./internal/crypto/channel
-      - run: go test -race -count=10 -run 'TestSession|TestIdentify|TestStop|TestGossip|TestNAT|TestEncrypted|TestDHT' ./internal/p2p
+      - run: go test -race -count=10 -run 'TestSession|TestIdentify|TestStop|TestGossip|TestNAT|TestEncrypted|TestDHT|TestSigned|TestAdmission|TestSlow|TestOldSession|TestCorrectOutboundPin' ./internal/p2p
+      - run: go test ./internal/p2p -run '^$' -fuzz '^FuzzEnvelopeDecoder$' -fuzztime=5s -parallel=2
+      - run: go test ./internal/dht -run '^$' -fuzz '^FuzzRecordValidation$' -fuzztime=5s -parallel=2
+      - run: go test ./internal/crypto/channel -run '^$' -fuzz '^FuzzChannelDecrypt$' -fuzztime=5s -parallel=2
       - run: python3 scripts/demo.py
       - name: Scan reachable Git history for secrets
         run: |
