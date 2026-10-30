@@ -4,15 +4,26 @@ import (
 	"encoding/json"
 	"p2p-park/internal/netx"
 	"p2p-park/internal/proto"
+	"time"
 )
 
 func (n *Node) handleEnvelope(p *peer, env proto.Envelope) {
+	if env.Type != proto.MsgGossip && env.Type != proto.MsgNatRelay {
+		env.FromID = p.id
+	}
+	if !n.allowPeerMessage(p) {
+		_ = p.conn.Close()
+		return
+	}
 	switch env.Type {
 	case proto.MsgPeerList:
 		var pl proto.PeerList
 		if err := json.Unmarshal(env.Payload, &pl); err != nil {
 			n.Logf("bad peer list from %s: %s", p.id, err)
 			return
+		}
+		if len(pl.Peers) > maxDiscoveryBatch {
+			pl.Peers = pl.Peers[:maxDiscoveryBatch]
 		}
 		for _, pi := range pl.Peers {
 			if pi.ID == n.id.ID {
@@ -22,14 +33,20 @@ func (n *Node) handleEnvelope(p *peer, env proto.Envelope) {
 				continue
 			}
 			n.Logf("discovery: dialing peer %s at %s", pi.ID, pi.Addr)
-			n.ConnectTo(netx.Addr(pi.Addr))
+			n.queueReferral(netx.Addr(pi.Addr), pi.ID)
 		}
 	case proto.MsgGossip:
+		if !verifyGossip(env, time.Now()) {
+			return
+		}
 		var g proto.Gossip
 		if err := json.Unmarshal(env.Payload, &g); err != nil {
 			return
 		}
-		if n.seen.Seen(g.ID) {
+		if g.ID == "" || len(g.ID) > 128 || len(g.Channel) > 128 {
+			return
+		}
+		if n.seen.Seen(env.FromID + "/" + g.ID) {
 			return
 		}
 
@@ -50,7 +67,10 @@ func (n *Node) handleEnvelope(p *peer, env proto.Envelope) {
 		}
 	case proto.MsgDHT:
 		if n.dht != nil {
-			n.dht.HandleDHT(n, p.id, string(p.addr), p.name, env)
+			n.mu.RLock()
+			name := p.name
+			n.mu.RUnlock()
+			n.dht.HandleDHT(n, p.id, string(p.addr), name, env)
 		}
 		return
 

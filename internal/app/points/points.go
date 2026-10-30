@@ -66,7 +66,7 @@ func verifySigned(s proto.SignedPointsSnapshot) bool {
 	}
 
 	expectedID := p2p.PlayerIDFromPub(pub)
-	return s.Snapshot.PlayerID != expectedID
+	return s.Snapshot.PlayerID == expectedID
 }
 
 // AddSelf increments our own points by delta and returns a signed snapshot.
@@ -105,7 +105,7 @@ func (e *Engine) SnapshotSelf() (proto.SignedPointsSnapshot, error) {
 // ApplyRemote merges a remote signed snapshot into our view.
 // Returns true if it changed our local view, false if ignored (older or same version).
 func (e *Engine) ApplyRemote(s proto.SignedPointsSnapshot) bool {
-	if !verifySigned(s) {
+	if len(s.Snapshot.Name) > 256 || !verifySigned(s) {
 		return false
 	}
 
@@ -123,6 +123,9 @@ func (e *Engine) ApplyRemote(s proto.SignedPointsSnapshot) bool {
 		return false
 	}
 
+	if !ok && len(e.others) >= 2048 {
+		return false
+	}
 	e.others[snap.PlayerID] = snap
 	return true
 }

@@ -22,7 +22,7 @@ type DHT struct {
 	rt        *RoutingTable
 
 	pendingMu sync.Mutex
-	pending   map[string]chan proto.DHTWire
+	pending   map[string]pendingRPC
 
 	store *Store
 	rs    RecordStore
@@ -37,6 +37,12 @@ type DHT struct {
 	inflight   map[string]int
 
 	metrics Metrics
+}
+
+type pendingRPC struct {
+	peerID string
+	kind   string
+	ch     chan proto.DHTWire
 }
 
 type ownedRec struct {
@@ -66,7 +72,7 @@ func New(selfIDHex string, opts ...Option) (*DHT, error) {
 		self:      selfNode,
 		rt:        NewRoutingTable(selfNode, 20),
 		rs:        NewMemRecordStore(),
-		pending:   make(map[string]chan proto.DHTWire),
+		pending:   make(map[string]pendingRPC),
 		owned:     make(map[[32]byte]ownedRec),
 		rl:        make(map[string]*tokenBucket),
 		inflight:  make(map[string]int),
@@ -136,3 +142,6 @@ func WithDiversityLimit(maxPerSubnet int) Option {
 		d.rt.SetDiversityLimit(maxPerSubnet)
 	}
 }
+
+// ForgetPeer releases rate-limit identities on disconnect; routing remains a hint.
+func (d *DHT) ForgetPeer(id string) { d.rlMu.Lock(); delete(d.rl, id); d.rlMu.Unlock() }

@@ -3,6 +3,7 @@ package dht
 import (
 	"context"
 	"crypto/ed25519"
+	"reflect"
 	"time"
 
 	"p2p-park/internal/proto"
@@ -64,6 +65,15 @@ func (d *DHT) GetValue(ctx context.Context, n Sender, key [32]byte) (*proto.DHTR
 }
 
 func (d *DHT) PublishRecord(ctx context.Context, n Sender, key [32]byte, rec *proto.DHTRecord, cfg PublishConfig) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if cfg.K > 20 {
+		cfg.K = 20
+	}
+	if cfg.Alpha > 3 {
+		cfg.Alpha = 3
+	}
 	if cfg.K <= 0 {
 		cfg.K = 20
 	}
@@ -80,11 +90,26 @@ func (d *DHT) PublishRecord(ctx context.Context, n Sender, key [32]byte, rec *pr
 	}
 
 	now := time.Now()
-	_ = d.rs.Put(key, rec, now)
+	if err := d.rs.Put(key, rec, now); err != nil {
+		// Identical retained records may be republished; stale/conflicting data cannot.
+		old, ok := d.rs.Get(key, now)
+		if !ok || !reflect.DeepEqual(old, rec) {
+			return err
+		}
+	}
 
 	// Mark as “owned” so maintenance can republish
 	d.ownedMu.Lock()
-	d.owned[key] = ownedRec{nextRepublish: now.Add(30 * time.Minute)}
+	if len(d.owned) >= MaxRecords {
+		for k := range d.owned {
+			if _, ok := d.rs.Get(k, now); !ok {
+				delete(d.owned, k)
+			}
+		}
+	}
+	if _, ok := d.owned[key]; ok || len(d.owned) < MaxRecords {
+		d.owned[key] = ownedRec{nextRepublish: now.Add(30 * time.Minute)}
+	}
 	d.ownedMu.Unlock()
 
 	// Find k-closest peers to the key by doing iterative FIND_NODE on the key target
@@ -108,7 +133,11 @@ func (d *DHT) PublishRecord(ctx context.Context, n Sender, key [32]byte, rec *pr
 
 	for _, nd := range nodes {
 		nd := nd
-		sem <- struct{}{}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case sem <- struct{}{}:
+		}
 		go func() {
 			defer func() { <-sem }()
 			w, e := d.QueryStore(n, nd.PeerID, KeyHex(key), rec, cfg.RPCTimeout)

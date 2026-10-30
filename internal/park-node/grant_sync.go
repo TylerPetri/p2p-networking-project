@@ -10,7 +10,7 @@ import (
 
 const (
 	grantSyncRecentIDs = 64
-	grantSyncLimit     = 1000
+	grantSyncLimit     = 128
 	grantSyncOverlap   = 5 * time.Minute
 )
 
@@ -81,6 +81,9 @@ func (a *App) handleGrantSyncRequest(env proto.Envelope) {
 	if err := json.Unmarshal(env.Payload, &req); err != nil {
 		return
 	}
+	if req.Limit <= 0 || req.Limit > grantSyncLimit {
+		req.Limit = grantSyncLimit
+	}
 	grs, err := a.GrantStore.ListSince(req.SinceTimestamp, req.Limit)
 	if err != nil {
 		return
@@ -103,13 +106,27 @@ func (a *App) handleGrantSyncResponse(env proto.Envelope) {
 		return
 	}
 
+	if len(resp.Grants) > grantSyncLimit {
+		return
+	}
 	for _, g := range resp.Grants {
 		// verify first to avoid persisting garbage
 		if err := grants.VerifyGrant(g); err != nil {
 			continue
 		}
-		if a.Ledger.ApplyGrant(g) {
-			_, _ = a.GrantStore.Put(g)
+		a.acceptGrant(g)
+	}
+}
+
+func (a *App) acceptGrant(g proto.QuizGrant) bool {
+	if grants.VerifyGrant(g) != nil {
+		return false
+	}
+	if a.GrantStore != nil {
+		if _, err := a.GrantStore.Put(g); err != nil {
+			a.logf("grant persistence rejected: %v", err)
+			return false
 		}
 	}
+	return a.Ledger.ApplyGrant(g)
 }

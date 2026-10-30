@@ -13,11 +13,12 @@ const (
 )
 
 var (
-	ErrBadRecord      = errors.New("dht: bad record")
-	ErrBadSignature   = errors.New("dht: bad signature")
-	ErrSeqTooLow      = errors.New("dht: seq too low")
-	ErrKeyMismatch    = errors.New("dht: key mismatch")
-	ErrRecordTooLarge = errors.New("dht: record too large")
+	ErrBadRecord          = errors.New("dht: bad record")
+	ErrBadSignature       = errors.New("dht: bad signature")
+	ErrSeqTooLow          = errors.New("dht: seq too low")
+	ErrKeyMismatch        = errors.New("dht: key mismatch")
+	ErrRecordTooLarge     = errors.New("dht: record too large")
+	ErrRecordTypeConflict = errors.New("dht: record type conflicts with retained record")
 )
 
 func KeyFromImmutable(value []byte) [32]byte {

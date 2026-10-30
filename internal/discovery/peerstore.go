@@ -3,6 +3,7 @@ package discovery
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"p2p-park/internal/appdata"
 	"sync"
@@ -17,9 +18,10 @@ type peerRecord struct {
 }
 
 type PeerStore struct {
-	path  string
-	mu    sync.RWMutex
-	peers map[string]*peerRecord
+	path   string
+	saveMu sync.Mutex
+	mu     sync.RWMutex
+	peers  map[string]*peerRecord
 }
 
 func DefaultPeerStorePath() string {
@@ -36,7 +38,15 @@ func NewPeerStore(path string) *PeerStore {
 }
 
 func (ps *PeerStore) load() error {
-	data, err := os.ReadFile(ps.path)
+	f, err := os.Open(ps.path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, 1024*1024+1))
+	if len(data) > 1024*1024 {
+		return fmt.Errorf("peer store too large")
+	}
 	if err != nil {
 		return nil
 	}
@@ -50,6 +60,9 @@ func (ps *PeerStore) load() error {
 	defer ps.mu.Unlock()
 
 	for i := range recs {
+		if i >= 1024 {
+			break
+		}
 		r := recs[i]
 		ps.peers[r.Addr] = &r
 	}
@@ -57,6 +70,8 @@ func (ps *PeerStore) load() error {
 }
 
 func (ps *PeerStore) save() error {
+	ps.saveMu.Lock()
+	defer ps.saveMu.Unlock()
 	ps.mu.RLock()
 	recs := make([]peerRecord, 0, len(ps.peers))
 	for _, r := range ps.peers {
@@ -79,11 +94,18 @@ func (ps *PeerStore) save() error {
 }
 
 func (ps *PeerStore) NoteSuccess(addr string) {
+	if len(addr) > 128 {
+		return
+	}
 	now := time.Now()
 
 	ps.mu.Lock()
 	r, ok := ps.peers[addr]
 	if !ok || r == nil {
+		if len(ps.peers) >= 1024 {
+			ps.mu.Unlock()
+			return
+		}
 		r = &peerRecord{Addr: addr}
 		ps.peers[addr] = r
 	}
@@ -96,11 +118,18 @@ func (ps *PeerStore) NoteSuccess(addr string) {
 }
 
 func (ps *PeerStore) NoteFailure(addr string) {
+	if len(addr) > 128 {
+		return
+	}
 	now := time.Now()
 
 	ps.mu.Lock()
 	r, ok := ps.peers[addr]
 	if !ok || r == nil {
+		if len(ps.peers) >= 1024 {
+			ps.mu.Unlock()
+			return
+		}
 		r = &peerRecord{Addr: addr}
 		ps.peers[addr] = r
 	}

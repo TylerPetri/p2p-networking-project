@@ -8,6 +8,8 @@ import (
 	"net"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // LANConfig controls LAN discovery behavior.
@@ -47,7 +49,7 @@ func StartLANResponder(stop <-chan struct{}, cfg LANConfig, listenAddr, name str
 					// Allow multiple sockets to bind the same addr:port.
 					_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
 					// SO_REUSEPORT is not available everywhere, but it's fine if it fails.
-					_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEPORT, 1)
+					_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEPORT, 1)
 				})
 			}
 			return ctrlErr
@@ -69,6 +71,7 @@ func StartLANResponder(stop <-chan struct{}, cfg LANConfig, listenAddr, name str
 		defer udpConn.Close()
 
 		buf := make([]byte, 1024)
+		var lastReply time.Time
 
 		for {
 			select {
@@ -95,6 +98,10 @@ func StartLANResponder(stop <-chan struct{}, cfg LANConfig, listenAddr, name str
 				continue
 			}
 
+			if time.Since(lastReply) < 20*time.Millisecond {
+				continue
+			}
+			lastReply = time.Now()
 			resp := lanMessage{
 				Type:   "pong",
 				Name:   name,
@@ -161,7 +168,7 @@ func DiscoverLANPeers(cfg LANConfig, listenAddr, name string) ([]string, error) 
 	out := make([]string, 0, 4)
 	buf := make([]byte, 1024)
 
-	for {
+	for replies := 0; replies < 256; replies++ {
 		n, from, err := conn.ReadFromUDP(buf)
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
@@ -181,11 +188,14 @@ func DiscoverLANPeers(cfg LANConfig, listenAddr, name string) ([]string, error) 
 		if full == "" || full == listenAddr || msg.Listen == listenAddr {
 			continue
 		}
-		if _, exists := seen[msg.Listen]; exists {
+		if _, exists := seen[full]; exists {
 			continue
 		}
-		seen[msg.Listen] = struct{}{}
+		seen[full] = struct{}{}
 		out = append(out, full)
+		if len(out) >= 64 {
+			break
+		}
 	}
 
 	return out, nil

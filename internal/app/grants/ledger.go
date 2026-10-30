@@ -38,11 +38,11 @@ func NewLedger() *Ledger {
 }
 
 func (l *Ledger) NoteName(peerID, name string) {
-	if peerID == "" || name == "" {
+	if peerID == "" || name == "" || len(peerID) > 64 || len(name) > 256 {
 		return
 	}
 	l.mu.Lock()
-	if _, ok := l.names[peerID]; !ok {
+	if _, ok := l.names[peerID]; !ok && len(l.names) < 2048 {
 		l.names[peerID] = name
 	}
 	l.mu.Unlock()
@@ -57,10 +57,14 @@ func (l *Ledger) ApplyGrant(g proto.QuizGrant) bool {
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if _, ok := l.grants[g.GrantID]; ok {
+	key := g.GrantorID + "/" + g.GrantID
+	if _, ok := l.grants[key]; ok {
 		return false
 	}
-	l.grants[g.GrantID] = g
+	if len(l.grants) >= MaxGrants {
+		return false
+	}
+	l.grants[key] = g
 	l.totals[g.RecipientID] += g.Points
 	return true
 }

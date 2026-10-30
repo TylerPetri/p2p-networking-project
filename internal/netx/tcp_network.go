@@ -1,8 +1,10 @@
 package netx
 
 import (
+	"context"
 	"net"
 	"sync"
+	"time"
 )
 
 type tcpNetwork struct {
@@ -42,7 +44,12 @@ func (t *tcpNetwork) Accept() (Conn, error) {
 }
 
 func (t *tcpNetwork) Dial(addr Addr) (Conn, error) {
-	c, err := net.Dial("tcp", string(addr))
+	return t.DialContext(context.Background(), addr)
+}
+
+func (t *tcpNetwork) DialContext(ctx context.Context, addr Addr) (Conn, error) {
+	d := net.Dialer{Timeout: 5 * time.Second}
+	c, err := d.DialContext(ctx, "tcp", string(addr))
 	if err != nil {
 		return nil, err
 	}
@@ -66,4 +73,12 @@ type tcpConn struct {
 
 func (c *tcpConn) RemoteAddr() Addr {
 	return Addr(c.Conn.RemoteAddr().String())
+}
+
+// Bound blocked frame writes without imposing an idle-read timeout on quiet peers.
+func (c *tcpConn) Write(p []byte) (int, error) {
+	if err := c.Conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return 0, err
+	}
+	return c.Conn.Write(p)
 }

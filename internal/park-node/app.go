@@ -24,14 +24,18 @@ import (
 )
 
 type App struct {
-	cfg    Config
-	ui     Printer
-	logger telemetry.Logger
+	replayMu        sync.Mutex
+	encryptedReplay map[[32]byte]time.Time
+	replayNextSweep time.Time
+	cfg             Config
+	ui              Printer
+	logger          telemetry.Logger
 
 	Node *p2p.Node
 
 	// Discovery lifecycle
-	stopLAN chan struct{}
+	stopLAN  chan struct{}
+	stopOnce sync.Once
 
 	// Points engine
 	Points *points.Engine
@@ -54,14 +58,16 @@ type App struct {
 
 func New(cfg Config, logger *log.Logger) (*App, error) {
 	n, err := p2p.NewNode(p2p.NodeConfig{
-		Name:       cfg.Name,
-		Network:    netx.NewTCPNetwork(),
-		BindAddr:   cfg.Bind,
-		Bootstraps: cfg.Bootstraps,
-		Protocol:   "park-p2p/0.1.0",
-		Logger:     logger,
-		Debug:      cfg.Debug,
-		IsSeed:     cfg.IsSeed,
+		Name:           cfg.Name,
+		PeerPins:       cfg.PeerPins,
+		DiscoveryCIDRs: cfg.DiscoveryCIDRs,
+		Network:        netx.NewTCPNetwork(),
+		BindAddr:       cfg.Bind,
+		Bootstraps:     cfg.Bootstraps,
+		Protocol:       proto.ApplicationProtocol,
+		Logger:         logger,
+		Debug:          cfg.Debug,
+		IsSeed:         cfg.IsSeed,
 	})
 	if err != nil {
 		return nil, err
@@ -112,15 +118,17 @@ func (a *App) Start() error {
 		return err
 	}
 
-	lanCfg := discovery.DefaultLANConfig()
+	if !a.cfg.DisableLAN {
+		lanCfg := discovery.DefaultLANConfig()
 
-	if err := discovery.StartLANResponder(a.stopLAN, lanCfg, string(a.Node.ListenAddr()), a.Node.Name()); err != nil {
-		a.logf("LAN responder failed: %v", err)
+		if err := discovery.StartLANResponder(a.stopLAN, lanCfg, string(a.Node.ListenAddr()), a.Node.Name()); err != nil {
+			a.logf("LAN responder failed: %v", err)
+		}
+
+		ps := discovery.NewPeerStore(discovery.DefaultPeerStorePath())
+		mgr := discovery.NewManager(ps, lanCfg)
+		mgr.Run(a.Node)
 	}
-
-	ps := discovery.NewPeerStore(discovery.DefaultPeerStorePath())
-	mgr := discovery.NewManager(ps, lanCfg)
-	mgr.Run(a.Node)
 
 	// Broadcast initial signed points snapshot
 	if snap, err := a.Points.SnapshotSelf(); err == nil {
@@ -138,11 +146,19 @@ func (a *App) Run(ctx context.Context) error {
 
 	// Event emitter
 	go func() {
-		for ev := range a.Node.Events() {
+		for {
+			var ev p2p.Event
+			select {
+			case <-ctx.Done():
+				return
+			case <-a.Node.Done():
+				return
+			case ev = <-a.Node.Events():
+			}
 			switch ev.Type {
 			case p2p.EventPeerConnected:
 				a.ui.Printf("[NET] peer connected: %s (%s)\n", ev.PeerName, ev.PeerAddr)
-				go a.initiateGrantSync(ev.PeerID)
+				a.initiateGrantSync(ev.PeerID)
 			case p2p.EventPeerDisconnected:
 				a.ui.Printf("[NET] peer disconnected: %s\n", ev.PeerID)
 			}
@@ -164,16 +180,13 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 func (a *App) StopAll() {
-	select {
-	case <-a.stopLAN:
-		// already closed by someone
-	default:
+	a.stopOnce.Do(func() {
 		close(a.stopLAN)
-	}
-	a.Node.Stop()
-	if a.GrantStore != nil {
-		_ = a.GrantStore.Close()
-	}
+		_ = a.Node.Stop()
+		if a.GrantStore != nil {
+			_ = a.GrantStore.Close()
+		}
+	})
 }
 
 func (a *App) logf(format string, args ...any) {

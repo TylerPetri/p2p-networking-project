@@ -13,21 +13,27 @@ func (n *Node) addPeer(p *peer) bool {
 	if n.dht != nil {
 		n.dht.OnPeerSeen(p.id, string(p.addr), p.name)
 	}
+	if n.ctx.Err() != nil {
+		return false
+	}
 	n.peers[p.id] = p
 	n.emit(Event{Type: EventPeerConnected, PeerID: p.id, PeerAddr: string(p.addr), PeerName: p.name})
 	return true
 }
 
-func (n *Node) removePeer(id string) {
+func (n *Node) removePeer(id string, expected ...*peer) {
 	var p *peer
 
 	n.mu.Lock()
 	p = n.peers[id]
-	if p == nil {
+	if p == nil || (len(expected) > 0 && p != expected[0]) {
 		n.mu.Unlock()
 		return
 	}
 	delete(n.peers, id)
+	if n.dht != nil {
+		n.dht.ForgetPeer(id)
+	}
 
 	if uid := p.userID; uid != "" {
 		if cur := n.natByUserID[uid]; cur == p {
@@ -37,6 +43,7 @@ func (n *Node) removePeer(id string) {
 			delete(n.peersByUserID, uid)
 		}
 	}
+	name := p.name
 	n.mu.Unlock()
 
 	p.once.Do(func() {
@@ -44,7 +51,7 @@ func (n *Node) removePeer(id string) {
 			p.cancel()
 		}
 		_ = p.conn.Close()
-		n.emit(Event{Type: EventPeerDisconnected, PeerID: p.id, PeerAddr: string(p.addr), PeerName: p.name})
+		n.emit(Event{Type: EventPeerDisconnected, PeerID: p.id, PeerAddr: string(p.addr), PeerName: name})
 	})
 }
 

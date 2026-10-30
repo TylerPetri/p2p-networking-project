@@ -1,6 +1,7 @@
 package parknode
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"time"
@@ -60,6 +61,9 @@ func (a *App) handleGlobalChat(env proto.Envelope, g proto.Gossip) {
 		return
 	}
 
+	if len(chat.Text) > 4096 {
+		return
+	}
 	ts := time.Unix(chat.Timestamp, 0).Format("15:04:05")
 
 	sender := a.Node.PeerDisplayName(env.FromID)
@@ -105,7 +109,7 @@ func (a *App) handleQuiz(env proto.Envelope, g proto.Gossip) {
 		}
 		ans := *qw.Answer
 
-		answererUserID := a.Node.UserIDForPeer(env.FromID)
+		answererUserID := hex.EncodeToString(env.OriginPub)
 		if answererUserID == "" {
 			return
 		}
@@ -143,10 +147,7 @@ func (a *App) handleQuiz(env proto.Envelope, g proto.Gossip) {
 		}
 		g := *qw.Grant
 
-		if a.Ledger.ApplyGrant(g) {
-			if a.GrantStore != nil {
-				_, _ = a.GrantStore.Put(g)
-			}
+		if a.acceptGrant(g) {
 
 			wire := proto.QuizWire{Kind: "grant", Grant: &g}
 			body, _ := json.Marshal(wire)
@@ -162,6 +163,9 @@ func (a *App) handleQuiz(env proto.Envelope, g proto.Gossip) {
 
 	case "result":
 		if qw.Result == nil {
+			return
+		}
+		if !a.Quiz.IsCreator(qw.Result.QuizID, hex.EncodeToString(env.OriginPub)) {
 			return
 		}
 		if qw.Result.PlayerID != a.userIDHex() {
@@ -191,19 +195,22 @@ func (a *App) handleEncrypted(env proto.Envelope, g proto.Gossip) {
 		return
 	}
 
-	pt, err := channel.Decrypt(key, em.Nonce, em.Ciphertext)
+	pt, err := channel.DecryptForChannel(key, chName, em.Nonce, em.Ciphertext)
 	if err != nil {
 		a.ui.Printf("[enc:%s] decrypt failed: %v\n", chName, err)
 		return
 	}
 
+	if !a.acceptCiphertext(key, em.Nonce, em.Ciphertext) {
+		return
+	}
 	var payload map[string]any
 	if err := json.Unmarshal(pt, &payload); err != nil {
 		a.ui.Printf("[enc:%s] %s\n", chName, string(pt))
 		return
 	}
 
-	from, _ := payload["from"].(string)
+	from := a.Node.PeerDisplayName(env.FromID)
 	text, _ := payload["text"].(string)
 
 	if from == "" {

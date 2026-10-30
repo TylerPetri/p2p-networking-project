@@ -31,18 +31,27 @@ func (n *Node) handleIdentify(p *peer, env proto.Envelope) {
 		return
 	}
 
+	if len(ident.Name) > 256 {
+		return
+	}
 	n.mu.Lock()
+	if !sameUserIdentity(p.userPub, ident.UserPub) {
+		n.mu.Unlock()
+		n.Logf("rejected identity change from %s", p.id)
+		return
+	}
 	p.name = ident.Name
 	if len(ident.UserPub) == ed25519.PublicKeySize {
 		p.userPub = ed25519.PublicKey(ident.UserPub)
 		p.userID = hex.EncodeToString(ident.UserPub)
 		n.peersByUserID[p.userID] = p
 	}
+	name, uid := p.name, p.userID
 	n.mu.Unlock()
 
 	if len(ident.UserPub) != ed25519.PublicKeySize {
 		n.Logf("identify from %s has invalid user_pub length %d", p.id, len(ident.UserPub))
 	}
 
-	n.Logf("peer %s identified as %q (userID=%s)", p.id, p.name, p.userID)
+	n.Logf("peer %s identified as %q (userID=%s)", p.id, name, uid)
 }

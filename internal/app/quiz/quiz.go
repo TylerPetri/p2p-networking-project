@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +67,9 @@ func hashAnswer(a string) [32]byte {
 
 // CreateOpen creates a new quiz open locally. The correct answer is stored locally only.
 func (e *Engine) CreateOpen(question, answer string, points int64, ttl time.Duration) (proto.QuizOpenSigned, string, error) {
+	if len(question) > 4096 || len(answer) > 4096 || points <= 0 || points > 1_000_000_000 {
+		return proto.QuizOpenSigned{}, "", errors.New("invalid quiz limits")
+	}
 	qid := p2p.NewMsgID()
 	now := time.Now()
 	exp := int64(0)
@@ -90,6 +94,10 @@ func (e *Engine) CreateOpen(question, answer string, points int64, ttl time.Dura
 	signed := proto.QuizOpenSigned{Open: o, Signature: sig}
 
 	e.mu.Lock()
+	if len(e.opens) >= 1024 || len(e.local) >= 128 {
+		e.mu.Unlock()
+		return proto.QuizOpenSigned{}, "", errors.New("quiz capacity reached")
+	}
 	e.opens[qid] = Open{QuizID: qid, CreatorID: o.CreatorID, Question: o.Question, Points: o.Points, Created: o.Created, Expires: o.Expires}
 	e.local[qid] = &localOpen{open: e.opens[qid], answerHash: hashAnswer(answer), awardedTo: make(map[string]bool)}
 	e.mu.Unlock()
@@ -99,6 +107,9 @@ func (e *Engine) CreateOpen(question, answer string, points int64, ttl time.Dura
 
 // ObserveOpen validates a signed open and stores it.
 func (e *Engine) ObserveOpen(s proto.QuizOpenSigned) bool {
+	if len(s.Open.QuizID) != 32 || len(s.Open.Question) > 4096 || s.Open.Points <= 0 || s.Open.Points > 1_000_000_000 {
+		return false
+	}
 	if s.Open.QuizID == "" || s.Open.CreatorID == "" || s.Open.Question == "" {
 		return false
 	}
@@ -121,6 +132,9 @@ func (e *Engine) ObserveOpen(s proto.QuizOpenSigned) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if _, ok := e.opens[s.Open.QuizID]; ok {
+		return false
+	}
+	if len(e.opens) >= 1024 {
 		return false
 	}
 	e.opens[s.Open.QuizID] = Open{QuizID: s.Open.QuizID, CreatorID: s.Open.CreatorID, Question: s.Open.Question, Points: s.Open.Points, Created: s.Open.Created, Expires: s.Open.Expires}
@@ -170,6 +184,9 @@ func (e *Engine) TryGrade(quizID, answererID, answer string) (grant proto.QuizGr
 	}
 	if lo.awardedTo[answererID] {
 		return proto.QuizGrant{}, false, true, true
+	}
+	if len(lo.awardedTo) >= 1024 || len(answer) > 4096 {
+		return proto.QuizGrant{}, false, true, false
 	}
 	if hashAnswer(answer) != lo.answerHash {
 		return proto.QuizGrant{}, false, true, false
@@ -227,4 +244,11 @@ func (e *Engine) ResolveQuizID(prefix string) (string, bool) {
 		return "", false
 	}
 	return match, true
+}
+
+func (e *Engine) IsCreator(id, creator string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	o, ok := e.opens[id]
+	return ok && o.CreatorID == creator
 }

@@ -12,7 +12,7 @@ func (p *peer) writeLoop(n *Node) {
 			}
 			if err := p.writer.Encode(env); err != nil {
 				n.Logf("write to %s failed: %v", p.id, err)
-				go n.removePeer(p.id)
+				n.removePeer(p.id, p)
 				return
 			}
 		}

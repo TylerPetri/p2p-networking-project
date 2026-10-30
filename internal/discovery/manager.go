@@ -30,7 +30,11 @@ func NewManager(store *PeerStore, lanCfg LANConfig) *Manager {
 // Run starts the periodic discovery loop.
 func (m *Manager) Run(n *p2p.Node) {
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		select {
+		case <-n.Done():
+			return
+		case <-time.After(500 * time.Millisecond):
+		}
 
 		for {
 			// 1) LAN
@@ -52,7 +56,15 @@ func (m *Manager) Run(n *p2p.Node) {
 			addrs = append(addrs, m.Seeds...)
 
 			seen := make(map[string]struct{})
-			for _, a := range addrs {
+			for i, a := range addrs {
+				select {
+				case <-n.Done():
+					return
+				default:
+				}
+				if i >= 16 {
+					break
+				}
 				if a == "" || a == string(listenAddr) {
 					continue
 				}
@@ -61,8 +73,8 @@ func (m *Manager) Run(n *p2p.Node) {
 				}
 				seen[a] = struct{}{}
 
-				go func(addr string) {
-					if err := n.ConnectTo(netx.Addr(addr)); err != nil {
+				func(addr string) {
+					if err := n.ConnectDiscovered(netx.Addr(addr), ""); err != nil {
 						if n.Debug() {
 							fmt.Printf("[DISCOVERY] connect to %s failed: %v\n", addr, err)
 						}
@@ -73,7 +85,11 @@ func (m *Manager) Run(n *p2p.Node) {
 				}(a)
 			}
 
-			time.Sleep(m.Interval)
+			select {
+			case <-n.Done():
+				return
+			case <-time.After(m.Interval):
+			}
 		}
 	}()
 }

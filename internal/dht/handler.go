@@ -8,6 +8,9 @@ import (
 )
 
 func (d *DHT) HandleDHT(n Sender, fromPeerID string, fromAddr string, fromName string, env proto.Envelope) {
+	if len(env.Payload) > 128*1024 {
+		return
+	}
 	var w proto.DHTWire
 	if err := json.Unmarshal(env.Payload, &w); err != nil {
 		n.Logf("dht: bad payload from %s: %v", fromPeerID, err)
@@ -18,6 +21,10 @@ func (d *DHT) HandleDHT(n Sender, fromPeerID string, fromAddr string, fromName s
 	d.rlMu.Lock()
 	b := d.rl[fromPeerID]
 	if b == nil {
+		if len(d.rl) >= 1024 {
+			d.rlMu.Unlock()
+			return
+		}
 		b = &tokenBucket{}
 		d.rl[fromPeerID] = b
 	}
@@ -27,27 +34,33 @@ func (d *DHT) HandleDHT(n Sender, fromPeerID string, fromAddr string, fromName s
 		return
 	}
 
-	// Update routing table on any DHT traffic.
-	d.ObservePeer(n, fromPeerID, fromAddr, fromName)
-
 	// Deliver responses to pending RPC waiters.
 	if w.RPCID != "" && (w.Kind == "NODES" || w.Kind == "PONG" || w.Kind == "VALUE" || w.Kind == "STORE_RESULT") {
 		d.pendingMu.Lock()
-		ch := d.pending[w.RPCID]
-		if ch != nil {
+		pending, exists := d.pending[w.RPCID]
+		if exists && pending.peerID == fromPeerID && pending.kind == w.Kind {
 			delete(d.pending, w.RPCID)
 		}
 		d.pendingMu.Unlock()
 
-		if ch != nil {
+		if exists && pending.peerID == fromPeerID && pending.kind == w.Kind {
 			select {
-			case ch <- w:
+			case pending.ch <- w:
 			default:
 			}
-			return
 		}
+		// Unsolicited/mismatched replies never update routing or trigger requests.
+		return
 	}
 
+	// Do not perform a blocking eviction ping before delivering a pending reply.
+	switch w.Kind {
+	case "PING", "FIND_NODE", "FIND_VALUE", "STORE":
+	default:
+		return
+	}
+	// A request handler must not wait for a ping response on its own blocked reader.
+	d.OnPeerSeen(fromPeerID, fromAddr, fromName)
 	switch w.Kind {
 	case "PING":
 		reply := proto.DHTWire{Kind: "PONG", RPCID: w.RPCID}

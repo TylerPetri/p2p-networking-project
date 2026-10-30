@@ -1,22 +1,78 @@
-Copyright © 2026 Tyler Petri. All rights reserved.
+P2P-Park — Proprietary Evaluation Permission
 
-This software and its associated source code, documentation, and other
-materials (collectively, the "Software") are the exclusive property of
-Tyler Petri.
+Copyright © 2026 Tyler Petri. All rights reserved except as expressly granted
+below.
 
-This Software is proprietary and confidential. No permission is granted,
-express or implied, to use, copy, modify, merge, publish, distribute,
-sublicense, sell, or create derivative works of the Software, in whole or
-in part, without prior written permission from the copyright holder.
+1. Original materials and ownership
 
-The Software is provided for evaluation, review, and demonstration purposes
-only. Any unauthorized use of the Software is strictly prohibited.
+"Original Materials" means the original P2P-Park implementation, documentation
+and other original materials in this repository in which Tyler Petri holds
+copyright. It excludes third-party software and third-party license notices.
+Tyler Petri retains ownership of the Original Materials. Public availability
+of the repository does not make the Original Materials open source.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL
-THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY,
-WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF,
-OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. Limited evaluation permission
 
+Subject to the conditions below, Tyler Petri grants you a non-exclusive,
+royalty-free permission to view, clone and make copies of the Original
+Materials, and to build and execute them locally on computers under your
+control, solely for:
+
+  (a) your personal technical evaluation of this project; or
+  (b) evaluation of the author's work for recruitment or hiring review.
+
+Recruitment or hiring review may be conducted by an employer or recruitment
+organization, including a commercial organization. That review permission
+is not permission to use the project in commercial products or services.
+
+This permission includes running the project's tests and local multi-node
+demonstration, and creating the local binaries, caches and temporary files
+reasonably necessary for those activities. Copies may be made only as
+reasonably necessary for the permitted evaluation or recruitment review.
+
+3. Conditions and reserved rights
+
+Retain this notice, applicable copyright notices and required third-party
+notices in permitted copies of the source and documentation. Comply with
+applicable third-party notice requirements. Local build outputs and other
+copies remain subject to the same evaluation-only limits.
+
+Except for the limited permission above, no permission is granted to modify
+the Original Materials, create derivative works other than the local build
+outputs authorized above, redistribute or publish copies of source or
+binaries to third parties, sublicense, sell, or use the Original Materials
+for production purposes or in commercial products or services. Those uses
+require separate prior written permission from Tyler Petri. In particular,
+this notice does not grant commercial redistribution rights.
+
+All rights not expressly granted are reserved. No ownership transfer,
+trademark license or endorsement is granted. Nothing in this notice limits
+rights you independently have under applicable law, applicable GitHub
+hosting terms, or third-party licenses.
+
+4. Third-party components
+
+Third-party components retain their own copyrights and license terms.
+Those terms govern those components independently and are not restricted
+or replaced by this notice. See THIRD_PARTY_NOTICES.md and the accompanying
+third-party license and patent notices. This permission does not excuse
+compliance with those terms when they apply.
+
+5. Experimental security status
+
+P2P-Park is an experimental networking and distributed-systems project.
+Its protocol has not been independently security-audited, and no formal
+verification or production-security certification is claimed. This
+permission does not authorize production use or use for sensitive
+communications. See SECURITY.md for the threat model and limitations.
+
+6. Disclaimer
+
+THE ORIGINAL MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES
+OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE ORIGINAL MATERIALS OR THE
+USE OR OTHER DEALINGS IN THE ORIGINAL MATERIALS, TO THE EXTENT PERMITTED
+BY APPLICABLE LAW.

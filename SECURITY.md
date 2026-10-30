@@ -1,40 +1,97 @@
-# Security Policy
+# Security policy and threat model
 
-P2P-Park is a cryptography-first, fully decentralized peer-to-peer system.
-Security is treated as a core feature, not an afterthought.
+P2P-Park is experimental. Neither an independent protocol verification nor a
+completed security audit is claimed. Use disposable data on a controlled local
+network. The [Pass 1 review](docs/SECURITY_REVIEW.md) records the original baseline;
+the [Pass 2 review](docs/PASS2_REVIEW.md) describes the budgets and the
+[final review](docs/FINAL_REVIEW.md) gives the current merge/risk assessment.
 
-## Design Principles
+## Assets and adversaries
 
-- **No trusted servers**
-  All nodes authenticate using public-key identity.
-  There is no central authority or coordinator.
+Protect process availability, correspondence between connected peers and keys,
+message integrity/confidentiality, replay state, DHT record integrity and local
+storage. Treat TCP clients, authenticated peers, UDP advertisements, referrals,
+relays, names, JSON and remote signed application data as potentially malicious.
+An authenticated signer is not necessarily authorized, honest or a unique person.
+Local host compromise and malicious local API callers are outside these controls.
 
-- **Authenticated key exchange**
-  Peers establish shared secrets using an X3DH-style handshake,
-  providing identity binding and resistance to MITM attacks.
+## Implemented cryptography and trust
 
-- **Encrypted transport**
-  All peer communication occurs over Noise-encrypted channels using
-  modern AEAD primitives (XChaCha20-Poly1305).
+- Noise XX uses `github.com/flynn/noise`: X25519, ChaCha20-Poly1305 and BLAKE2s.
+  Ordered per-direction AEAD nonces protect transport records. This is not X3DH.
+- Ed25519 handshake signatures bind the signing key to the Noise static key in
+  both directions. Hello IDs must match that static key. Optional outbound pins
+  check an operator-supplied expected Noise key; discovered names/keys are never
+  automatically promoted to trusted human identities. Inbound admission remains
+  open to arbitrary keys within the connection budget.
+- Gossip carries an Ed25519 origin signature over a domain-separated fixed-field
+  JSON envelope, signing-key/static-key binding and timestamp. Relays preserve the
+  signature. Direct control-message origins come from the authenticated session.
+  NAT relay routing metadata remains the seed's claim; opaque payloads need their
+  own authentication before any future authorization use.
+- Shared channels use XChaCha20-Poly1305 with random 24-byte nonces and the channel
+  name as associated data. The gossip signer, not a plaintext `from` label,
+  supplies the displayed origin. Key holders can still produce valid ciphertext.
+- Immutable DHT values use SHA-256 content addressing. Mutable records use
+  Ed25519 signatures over key, sequence, expiry and value; the key derives from
+  signing key and name. Immutable expiry/creation metadata is not hash-bound.
+  Quiz grants and points use Ed25519 signatures; bounded canonical grant IDs
+  exclude ambiguous delimiter encodings. Signatures do not establish award fairness.
 
-- **Signed state**
-  Data propagated through the DHT is cryptographically signed and verified
-  to prevent spoofing or unauthorized mutation.
+Keys are generated on node startup and retained in process memory. No persistent
+identity store, automatic key rotation, PKI, trusted name directory or durable
+pin database is implemented. Obtain expected keys out of band and update pins
+after restarting ephemeral identities. There is no secure-memory erasure claim.
 
-## Threat Model (Non-Exhaustive)
+## Resource, discovery and replay boundaries
 
-This project explicitly considers:
-- Passive and active network observers
-- Man-in-the-middle attacks
-- Replay attacks
-- Unauthorized peer impersonation
-- Malicious peers attempting to inject invalid state
+Frames, JSON envelopes, connection admission, outbound queues, DHT records,
+lookup concurrency, discovery candidates, replay caches and principal application
+maps have explicit component limits listed in the Pass 2 review. Setup is bounded
+by five seconds; each complete message (including idle time) has a two-minute
+watchdog. TCP dialing and writes have five-second bounds. Stop cancels network
+I/O and joins tracked node workers. Alternative transports must unblock on Close.
 
-This project does *not* currently attempt to defend against:
-- Global adversaries with full network visibility
-- Denial-of-service at Internet scale
+Automatic discovery does not resolve DNS. It accepts only approved numeric CIDRs,
+connected peers' own hosts, or loopback when bound to loopback, and checks advertised
+peer IDs after Noise. Explicit operator bootstraps may resolve DNS; use pins when
+identity matters. UDP source-IP/port binding, candidate limits and response pacing
+reduce abuse but do not authenticate LAN advertisements or stop spoofed UDP.
 
-## Reporting Issues
+Signed gossip has a five-minute lifetime, 30-second future clock allowance, and a
+bounded origin-scoped replay cache. Capacity saturation drops new entries instead
+of evicting live replay evidence. Decrypted channel ciphertexts have a separate
+24-hour bounded replay cache. These caches do not survive restart, and a recipient
+that has not previously seen a valid in-window message can accept it. Re-encryption
+or deliberate new messages from an authorized signer are not identifiable replays.
+An observer can rewrap copied channel ciphertext in its own signed gossip; a
+recipient without a prior ciphertext-cache entry may accept it. The displayed
+gossip signer is not proof of who originally encrypted that ciphertext.
+Immutable and mutable derivations share a key namespace. Stored record types
+cannot change while retained, so a type switch cannot bypass a retained sequence
+check. This does not stop first-writer preemption: `GetValue` is untyped, and callers
+must check the record type they intended. A future typed/key-namespace change is
+outside the current protocol. Mutable rollback checks last only while retained;
+grant deduplication is
+persistent but total storage is capped.
 
-If you discover a security issue, please open a private issue or contact
-the maintainer directly. Responsible disclosure is appreciated.
+Finite budgets do not prevent denial of service: Sybil peers can occupy slots,
+fill stores/caches, consume CPU or block honest discovery. Broad CIDR approval
+allows port probes within that range. There is no Byzantine DHT quorum, newest-value
+guarantee, reliable delivery, Internet-scale DoS protection, traffic-analysis
+resistance, or independently verified security guarantee. Grant sync is a bounded
+best-effort batch, not a complete history reconciliation protocol. Do not use this
+project for sensitive communication or expose it as a trusted public service.
+
+## Reporting vulnerabilities
+
+Do not put secrets or exploitable details in public issues. If enabled, use
+[GitHub private vulnerability reporting](https://github.com/TylerPetri/p2p-networking-project/security/advisories/new).
+Otherwise arrange a private channel through the maintainer's
+[GitHub profile](https://github.com/TylerPetri) before sending details. No monitored
+security mailbox, response SLA or supported release series is established here.
+The development branch receives fixes on a best-effort basis.
+
+If credentials ever appear in history, revoke/rotate them first. Removing them
+from the current tree does not remove history, forks, caches or clones. History
+rewrites and visibility changes are separate maintainer decisions.

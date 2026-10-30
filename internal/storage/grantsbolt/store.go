@@ -65,8 +65,8 @@ func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Put(g proto.QuizGrant) (bool, error) {
 	// Caller must verify. Still guard against obviously bad inputs to protect the DB.
-	if g.GrantID == "" {
-		return false, errors.New("missing grant id")
+	if err := grants.VerifyGrant(g); err != nil {
+		return false, err
 	}
 
 	val, err := json.Marshal(g)
@@ -80,14 +80,25 @@ func (s *Store) Put(g proto.QuizGrant) (bool, error) {
 		byTS := tx.Bucket([]byte(bByTS))
 		meta := tx.Bucket([]byte(bMeta))
 
-		if byID.Get([]byte(g.GrantID)) != nil {
+		key := g.GrantorID + "/" + g.GrantID
+		if byID.Get([]byte(key)) != nil {
 			return nil
 		}
 
-		if err := byID.Put([]byte(g.GrantID), val); err != nil {
+		// Recognize earlier valid entries without rewriting published state.
+		if old := byID.Get([]byte(g.GrantID)); old != nil {
+			var prior proto.QuizGrant
+			if json.Unmarshal(old, &prior) == nil && prior.GrantorID == g.GrantorID {
+				return nil
+			}
+		}
+		if byID.Stats().KeyN >= grants.MaxGrants {
+			return errors.New("grant store full")
+		}
+		if err := byID.Put([]byte(key), val); err != nil {
 			return err
 		}
-		if err := byTS.Put(tsKey(g.Timestamp, g.GrantID), nil); err != nil {
+		if err := byTS.Put(tsKey(g.Timestamp, key), nil); err != nil {
 			return err
 		}
 
@@ -140,8 +151,8 @@ func (s *Store) RecentGrantIDs(n int) ([]string, error) {
 }
 
 func (s *Store) ListSince(since int64, limit int) ([]proto.QuizGrant, error) {
-	if limit <= 0 {
-		limit = 500
+	if limit <= 0 || limit > 128 {
+		limit = 128
 	}
 	out := make([]proto.QuizGrant, 0, min(limit, 256))
 

@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
+	"net/netip"
 	"p2p-park/internal/dht"
 	"p2p-park/internal/netx"
 	"p2p-park/internal/proto"
@@ -15,27 +17,39 @@ import (
 )
 
 type NodeConfig struct {
-	Name       string           // user-facing name
-	Network    netx.Network     // transport implementation
-	BindAddr   string           // e.g. ":0" to choose random port
-	Bootstraps []netx.Addr      // known peers to try on startup
-	Protocol   string           // protocol version string
-	Logger     telemetry.Logger // system logger
-	Debug      bool             // flag for showing hidden logs to debug
-	IsSeed     bool             // if true, this node will keep NAT registry & relay
+	MaxConnections int
+	MessageTimeout time.Duration
+	// Explicit operator trust: address -> expected Noise static key hex.
+	PeerPins map[netx.Addr]string
+	// Automatic discovery never resolves DNS; additional numeric destinations
+	// require operator-approved CIDRs. Same-host referrals remain allowed.
+	DiscoveryCIDRs []string
+	Name           string           // user-facing name
+	Network        netx.Network     // transport implementation
+	BindAddr       string           // e.g. ":0" to choose random port
+	Bootstraps     []netx.Addr      // known peers to try on startup
+	Protocol       string           // protocol version string
+	Logger         telemetry.Logger // system logger
+	Debug          bool             // flag for showing hidden logs to debug
+	IsSeed         bool             // if true, this node will keep NAT registry & relay
 }
 
 type peer struct {
+	rateMu       sync.Mutex
+	rateLast     time.Time
+	rateTokens   float64
 	id           string
 	addr         netx.Addr
 	observedAddr netx.Addr
 	conn         io.ReadWriteCloser // stream type for Noise secure encrypted
 	writer       *json.Encoder
+	reader       *envelopeDecoder
 
-	sendCh chan proto.Envelope
-	ctx    context.Context
-	cancel context.CancelFunc
-	once   sync.Once
+	writerDone chan struct{}
+	sendCh     chan proto.Envelope
+	ctx        context.Context
+	cancel     context.CancelFunc
+	once       sync.Once
 
 	name    string
 	userPub ed25519.PublicKey
@@ -51,9 +65,16 @@ type PeerSnapshot struct {
 }
 
 type Node struct {
-	cfg  NodeConfig
-	id   *Identity
-	addr netx.Addr
+	lifeMu            sync.Mutex
+	sessions          sync.WaitGroup
+	workers           sync.WaitGroup
+	slots             chan struct{}
+	referrals         chan referral
+	dialing           map[netx.Addr]string
+	discoveryPrefixes []netip.Prefix
+	cfg               NodeConfig
+	id                *Identity
+	addr              netx.Addr
 
 	mu            sync.RWMutex
 	peers         map[string]*peer
@@ -72,6 +93,29 @@ type Node struct {
 }
 
 func NewNode(cfg NodeConfig) (*Node, error) {
+	if cfg.MaxConnections <= 0 {
+		cfg.MaxConnections = DefaultMaxConnections
+	}
+	if cfg.MessageTimeout <= 0 {
+		cfg.MessageTimeout = 2 * time.Minute
+	}
+	// Copy caller-owned trust configuration: never race mutable maps/slices.
+	pins := make(map[netx.Addr]string, len(cfg.PeerPins))
+	for addr, id := range cfg.PeerPins {
+		if !validPeerID(id) {
+			return nil, fmt.Errorf("invalid peer pin for %s", addr)
+		}
+		pins[addr] = id
+	}
+	cfg.PeerPins = pins
+	var prefixes []netip.Prefix
+	for _, s := range cfg.DiscoveryCIDRs {
+		p, err := netip.ParsePrefix(s)
+		if err != nil {
+			return nil, err
+		}
+		prefixes = append(prefixes, p)
+	}
 	if cfg.Logger == nil {
 		cfg.Logger = log.Default()
 	}
@@ -85,16 +129,20 @@ func NewNode(cfg NodeConfig) (*Node, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	n := &Node{
-		cfg:           cfg,
-		id:            id,
-		peers:         make(map[string]*peer),
-		peersByUserID: make(map[string]*peer),
-		ctx:           ctx,
-		cancel:        cancel,
-		incoming:      make(chan proto.Envelope, 128),
-		events:        make(chan Event, 128),
-		seen:          newSeenCache(30 * time.Second),
-		dht:           dd,
+		cfg:               cfg,
+		slots:             make(chan struct{}, cfg.MaxConnections),
+		referrals:         make(chan referral, 64),
+		dialing:           make(map[netx.Addr]string),
+		discoveryPrefixes: prefixes,
+		id:                id,
+		peers:             make(map[string]*peer),
+		peersByUserID:     make(map[string]*peer),
+		ctx:               ctx,
+		cancel:            cancel,
+		incoming:          make(chan proto.Envelope, 128),
+		events:            make(chan Event, 128),
+		seen:              newSeenCache(gossipLifetime + gossipFutureSkew + time.Second),
+		dht:               dd,
 	}
 	if cfg.IsSeed {
 		n.natByUserID = make(map[string]*peer)
@@ -120,11 +168,12 @@ func (n *Node) Start() error {
 	n.addr = addr
 	n.Logf("listening on %s, peerID=%s", n.addr, n.id.ID)
 
-	go n.acceptLoop()
+	n.launchWorker(n.acceptLoop)
+	n.launchWorker(n.referralLoop)
 
 	n.coldStartDHTBootstrap()
 
-	go n.discoveryLoop()
+	n.launchWorker(n.discoveryLoop)
 
 	n.startDHTBootstrapLoop(DefaultDHTBootstrapConfig())
 
@@ -133,8 +182,22 @@ func (n *Node) Start() error {
 
 // Stop shuts down the node.
 func (n *Node) Stop() error {
+	n.lifeMu.Lock()
 	n.cancel()
-	return n.cfg.Network.Close()
+	n.lifeMu.Unlock()
+	n.mu.RLock()
+	peers := make([]*peer, 0, len(n.peers))
+	for _, p := range n.peers {
+		peers = append(peers, p)
+	}
+	n.mu.RUnlock()
+	for _, p := range peers {
+		_ = p.conn.Close()
+	}
+	err := n.cfg.Network.Close()
+	n.sessions.Wait()
+	n.workers.Wait()
+	return err
 }
 
 func (n *Node) emit(e Event) {
@@ -152,7 +215,15 @@ func (n *Node) Broadcast(g proto.Gossip) {
 		FromID:  n.id.ID,
 		Payload: proto.MustMarshal(g),
 	}
-	n.relay(n.id.ID, env)
+	signed, err := n.signGossip(env)
+	if err != nil {
+		return
+	}
+	if !validEnvelopeSize(signed) {
+		return
+	}
+	n.seen.Seen(n.ID() + "/" + g.ID)
+	n.relay(n.id.ID, signed)
 }
 
 func (n *Node) relay(originID string, env proto.Envelope) {
@@ -170,3 +241,6 @@ func (n *Node) relay(originID string, env proto.Envelope) {
 		n.sendAsync(p, env)
 	}
 }
+
+// Done signals node shutdown to discovery workers.
+func (n *Node) Done() <-chan struct{} { return n.ctx.Done() }
