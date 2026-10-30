@@ -2,6 +2,9 @@ package proto
 
 import "encoding/json"
 
+// ApplicationProtocol is enforced by the park-node application Hello exchange.
+const ApplicationProtocol = "park-p2p/0.2.0"
+
 type MessageType string
 
 const (

@@ -3,7 +3,8 @@
 P2P-Park is experimental. Neither an independent protocol verification nor a
 completed security audit is claimed. Use disposable data on a controlled local
 network. The [Pass 1 review](docs/SECURITY_REVIEW.md) records the original baseline;
-the [Pass 2 review](docs/PASS2_REVIEW.md) supersedes its remaining-risk assessment.
+the [Pass 2 review](docs/PASS2_REVIEW.md) describes the budgets and the
+[final review](docs/FINAL_REVIEW.md) gives the current merge/risk assessment.
 
 ## Assets and adversaries
 
@@ -63,7 +64,15 @@ of evicting live replay evidence. Decrypted channel ciphertexts have a separate
 24-hour bounded replay cache. These caches do not survive restart, and a recipient
 that has not previously seen a valid in-window message can accept it. Re-encryption
 or deliberate new messages from an authorized signer are not identifiable replays.
-Mutable record rollback checks last only while retained; grant deduplication is
+An observer can rewrap copied channel ciphertext in its own signed gossip; a
+recipient without a prior ciphertext-cache entry may accept it. The displayed
+gossip signer is not proof of who originally encrypted that ciphertext.
+Immutable and mutable derivations share a key namespace. Stored record types
+cannot change while retained, so a type switch cannot bypass a retained sequence
+check. This does not stop first-writer preemption: `GetValue` is untyped, and callers
+must check the record type they intended. A future typed/key-namespace change is
+outside the current protocol. Mutable rollback checks last only while retained;
+grant deduplication is
 persistent but total storage is capped.
 
 Finite budgets do not prevent denial of service: Sybil peers can occupy slots,

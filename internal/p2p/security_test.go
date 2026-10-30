@@ -30,9 +30,10 @@ func securityNode(t *testing.T) *Node {
 }
 
 func TestSessionRejectsSpoofedHelloAndSigningIdentity(t *testing.T) {
-	for _, which := range []string{"hello", "signature", "valid"} {
+	for _, which := range []string{"hello", "signature", "old_protocol", "empty_protocol", "future_protocol", "valid"} {
 		t.Run(which, func(t *testing.T) {
 			n := securityNode(t)
+			n.cfg.Protocol = proto.ApplicationProtocol
 			id, err := NewIdentity()
 			if err != nil {
 				t.Fatal(err)
@@ -71,7 +72,16 @@ func TestSessionRejectsSpoofedHelloAndSigningIdentity(t *testing.T) {
 			if which == "hello" {
 				peerID = n.ID()
 			}
-			hello := proto.Envelope{Type: proto.MsgHello, FromID: peerID, Payload: proto.MustMarshal(proto.Hello{Protocol: n.cfg.Protocol, Listen: "127.0.0.1:12345"})}
+			remoteProtocol := n.cfg.Protocol
+			switch which {
+			case "old_protocol":
+				remoteProtocol = "park-p2p/0.1.0"
+			case "empty_protocol":
+				remoteProtocol = ""
+			case "future_protocol":
+				remoteProtocol = "park-p2p/99.0.0"
+			}
+			hello := proto.Envelope{Type: proto.MsgHello, FromID: peerID, Payload: proto.MustMarshal(proto.Hello{Protocol: remoteProtocol, Listen: "127.0.0.1:12345"})}
 			var wire bytes.Buffer
 			enc := json.NewEncoder(&wire)
 			_ = enc.Encode(hello)
@@ -82,9 +92,15 @@ func TestSessionRejectsSpoofedHelloAndSigningIdentity(t *testing.T) {
 				t.Fatal(err)
 			}
 			r := <-ch
-			if which == "hello" {
+			if which == "hello" || which == "old_protocol" || which == "empty_protocol" || which == "future_protocol" {
 				if r.err == nil {
-					t.Fatal("accepted spoofed network ID")
+					t.Fatal("accepted invalid Hello identity/protocol")
+				}
+				if which != "hello" && r.err.Error() != "incompatible protocol" {
+					t.Fatalf("wrong rejection reason: %v", r.err)
+				}
+				if n.PeerCount() != 0 {
+					t.Fatal("incompatible peer admitted")
 				}
 				return
 			}

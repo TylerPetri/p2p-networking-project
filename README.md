@@ -4,17 +4,18 @@ A Go peer-to-peer network where independent nodes discover one another, establis
 encrypted connections, and exchange signed gossip. Run three local processes to
 try chat, shared-key channels, signed points snapshots, quizzes and persisted grants.
 
-The engineering goal is to explore the boundary between working distributed
-systems and defensible protocol behavior: transport abstraction, concurrent peer
-lifecycles, discovery, XOR-distance routing, signed mutable state, replay handling
-and adversarial resource budgets. TCP, Noise XX, gossip and a Kademlia-style DHT
-remain the core design; the interactive app makes their behavior visible.
+I built P2P-Park to explore how peer discovery, encrypted connections, gossip and
+distributed records fit together in a working Go network. The chat and quiz app
+makes the network easy to exercise. The parts I wanted to work through were peer
+lifecycles, concurrent I/O, XOR-distance routing, signed state and what happens
+when peers send malformed data or stop responding.
 
 This is an experimental portfolio project. It is not a production messaging
 system, and its protocol has not been independently verified or audited. See
 [SECURITY.md](SECURITY.md) and the [engineering review](docs/SECURITY_REVIEW.md)
 for the threat model and [Pass 2 review](docs/PASS2_REVIEW.md) for current findings,
-test evidence, resource budgets and remaining limitations.
+test evidence and resource budgets. The [final review](docs/FINAL_REVIEW.md) records
+merge readiness, compatibility and remaining limitations.
 
 ## Architecture
 
@@ -40,7 +41,8 @@ flowchart LR
   on each node start; there is no persistent identity or trusted-key directory.
   Optional outbound `-pins address=Noise-ID` checks an expected key supplied by
   the operator; it does not silently trust a key on first use.
-- `internal/p2p` owns peer sessions, bounded connections and outbound queues, signed gossip and deduplication,
+- `internal/p2p` owns peer sessions, bounded connections and outbound queues,
+  signed gossip and deduplication,
   and optional seed rendezvous/relay. Seeds are peers with additional duties;
   deployments using them depend on their availability.
 - `internal/dht` validates immutable content hashes and mutable Ed25519 signatures,
@@ -108,8 +110,8 @@ python3 scripts/demo.py
 The script builds into a temporary directory, starts a seed plus Alice and Bob on
 OS-selected loopback ports, disables LAN discovery, and checks that Bob receives
 Alice's signed gossip and decrypts a shared-channel message. It prints `PASS`
-and shuts down all three processes. Each node
-gets isolated temporary application state, which is removed on exit.
+and shuts down all three processes. Each node gets isolated temporary application
+state, which is removed on exit.
 
 For an interactive version, build once and run these commands in three terminals
 from the repository root (choose other ports if these are occupied):
@@ -136,6 +138,7 @@ outside this demo and advertises/responds on UDP port 42042.
 
 ```sh
 go vet ./...
+go test -count=1 ./...
 go test -race -count=1 ./...
 go test -race -count=20 ./internal/crypto/noiseconn ./internal/dht ./internal/crypto/channel
 go test -race -count=10 -run 'TestSession|TestIdentify|TestStop|TestGossip|TestNAT|TestEncrypted|TestDHT' ./internal/p2p
@@ -147,15 +150,20 @@ go install github.com/zricethezav/gitleaks/v8@v8.24.3
 gitleaks git --log-opts='--all --full-history' --redact .
 ```
 
-CI runs vet, the race suite, repeated transport/DHT/P2P tests, the localhost demo,
-short fuzz runs, encrypted-channel delivery in the demo, and a history secret scan. Passing race tests is evidence for the exercised
+CI runs vet, the uncached ordinary and race suites, repeated transport/DHT/P2P
+tests, short fuzz runs, the signed/encrypted localhost demo and a history secret
+scan. Passing race tests is evidence for the exercised
 schedules, not proof of concurrency safety. The review adds tests for malicious
 framing, partial I/O, buffered reads, ciphertext replay/tampering, identity claims,
 RPC response sources, record validation and cancellation.
 
 The application protocol is `park-p2p/0.2.0`: mutual identity bindings, signed
 gossip and channel-name associated data are required. Older revisions are
-incompatible; all demo nodes must use the same revision. Existing TCP, Noise XX, gossip, DHT and relay architecture is retained.
+incompatible; all demo nodes must use the same revision. There is no version
+negotiation or rolling-upgrade guarantee. Empty, older and unknown Hello protocol
+versions are rejected before peer admission. The internal transport abstraction
+allows explicit test protocols; the shipped application uses one shared version
+constant. Existing TCP, Noise XX, gossip, DHT and relay architecture is retained.
 
 ## Security boundaries and resource budgets
 
@@ -175,7 +183,9 @@ An attacker can occupy capacity or exhaust a replay cache, create many identitie
 withhold records, lie about names or suggest ports inside approved ranges. Pins
 are optional and address-specific; replay caches are volatile; immutable expiry
 metadata is not hash-bound. Signed scores/grants prove who issued them, not whether
-the awards are fair. Use disposable data on a controlled local network. This is
+the awards are fair. DHT immutable/mutable keys share a namespace: retained record
+types cannot change, but an untyped lookup still needs a caller check of its
+intended type. Use disposable data on a controlled local network. This is
 ready to discuss as an engineering experiment, not as an audited secure messenger.
 
 Practical fuzz commands (short smoke runs, not exhaustive campaigns):
@@ -190,4 +200,9 @@ go test ./internal/crypto/channel -run '^$' -fuzz '^FuzzChannelDecrypt$' -fuzzti
 
 Copyright © 2026 Tyler Petri. All rights reserved. This is source available for
 portfolio evaluation under the existing [LICENSE.txt](LICENSE.txt), not an
-open-source license. The license terms remain unchanged.
+open-source license. The license terms remain unchanged. The current wording
+calls the source "confidential" and leaves public demo execution permission
+unclear; running the instructions assumes author permission. See
+[third-party notices and owner decisions](THIRD_PARTY_NOTICES.md) for the pinned
+MIT/BSD dependencies and release-attribution requirements. Those upstream
+licenses do not require making the original code open source.

@@ -8,6 +8,7 @@ import (
 	"p2p-park/internal/proto"
 )
 
+// RecordStore retains a key's record type until deletion/expiry; Get is untyped.
 type RecordStore interface {
 	Get(key [32]byte, now time.Time) (*proto.DHTRecord, bool)
 	Put(key [32]byte, rec *proto.DHTRecord, now time.Time) error
@@ -91,6 +92,11 @@ func (m *MemRecordStore) Put(key [32]byte, rec *proto.DHTRecord, now time.Time) 
 		}
 	}
 	oldRecord := m.data[key]
+	// The existing key derivations share a namespace. Never let a different
+	// record type bypass the retained mutable sequence or immutable value rules.
+	if oldRecord != nil && oldRecord.Type != rec.Type {
+		return ErrRecordTypeConflict
+	}
 	needed := m.bytes - recordBytes(oldRecord) + recordBytes(rec)
 	if needed > MaxRecordBytes || (oldRecord == nil && len(m.data) >= MaxRecords) {
 		return ErrStoreFull

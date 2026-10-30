@@ -64,7 +64,7 @@ func New(cfg Config, logger *log.Logger) (*App, error) {
 		Network:        netx.NewTCPNetwork(),
 		BindAddr:       cfg.Bind,
 		Bootstraps:     cfg.Bootstraps,
-		Protocol:       "park-p2p/0.2.0",
+		Protocol:       proto.ApplicationProtocol,
 		Logger:         logger,
 		Debug:          cfg.Debug,
 		IsSeed:         cfg.IsSeed,
