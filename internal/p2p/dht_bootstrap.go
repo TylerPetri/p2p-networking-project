@@ -42,7 +42,7 @@ func (n *Node) startDHTBootstrapLoop(cfg DHTBootstrapConfig) {
 		cfg.PerTickLookups = 2
 	}
 
-	go func() {
+	n.launchWorker(func() {
 		t := time.NewTicker(cfg.Tick)
 		defer t.Stop()
 
@@ -72,18 +72,18 @@ func (n *Node) startDHTBootstrapLoop(cfg DHTBootstrapConfig) {
 						if ni.NodeID == "" || ni.Addr == "" {
 							continue
 						}
-						if ni.NodeID == n.ID() {
+						if ni.PeerID == n.ID() {
 							continue
 						}
-						if n.hasPeer(ni.NodeID) {
+						if n.hasPeer(ni.PeerID) {
 							continue
 						}
-						_ = n.ConnectTo(netx.Addr(ni.Addr))
+						n.queueReferral(netx.Addr(ni.Addr), ni.PeerID)
 					}
 				}
 			}
 		}
-	}()
+	})
 }
 
 func (n *Node) coldStartDHTBootstrap() {
@@ -95,7 +95,7 @@ func (n *Node) coldStartDHTBootstrap() {
 		if addr == "" {
 			continue
 		}
-		_ = n.ConnectTo(netx.Addr(addr))
+		_ = n.ConnectDiscovered(netx.Addr(addr), "")
 	}
 }
 

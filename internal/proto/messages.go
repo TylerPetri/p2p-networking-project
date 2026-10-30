@@ -17,9 +17,13 @@ const (
 )
 
 type Envelope struct {
-	Type    MessageType     `json:"type"`
-	FromID  string          `json:"from_id"`
-	Payload json.RawMessage `json:"payload"`
+	OriginPub     []byte          `json:"origin_pub,omitempty"`
+	OriginBinding []byte          `json:"origin_binding,omitempty"`
+	Signature     []byte          `json:"signature,omitempty"`
+	SentUnix      int64           `json:"sent_unix,omitempty"`
+	Type          MessageType     `json:"type"`
+	FromID        string          `json:"from_id"`
+	Payload       json.RawMessage `json:"payload"`
 }
 
 // Hello is exchanged on connection setup.

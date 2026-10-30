@@ -42,6 +42,12 @@ func ParseKeyHex(s string) (ChannelKey, error) {
 
 // Encrypt encrypts plaintext using XChaCha20-Poly1305 with the given key.
 func Encrypt(key ChannelKey, plaintext []byte) ([]byte, []byte, error) {
+	return encrypt(key, plaintext, nil)
+}
+func EncryptForChannel(key ChannelKey, name string, plaintext []byte) ([]byte, []byte, error) {
+	return encrypt(key, plaintext, []byte("p2p-park/channel/v1:"+name))
+}
+func encrypt(key ChannelKey, plaintext, ad []byte) ([]byte, []byte, error) {
 	aead, err := chacha20poly1305.NewX(key[:])
 	if err != nil {
 		return nil, nil, err
@@ -50,12 +56,18 @@ func Encrypt(key ChannelKey, plaintext []byte) ([]byte, []byte, error) {
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, nil, err
 	}
-	ct := aead.Seal(nil, nonce, plaintext, nil)
+	ct := aead.Seal(nil, nonce, plaintext, ad)
 	return nonce, ct, nil
 }
 
 // Decrypt decrypts ciphertext using XChaCha20-Poly1305 with the given key.
 func Decrypt(key ChannelKey, nonce, ciphertext []byte) ([]byte, error) {
+	return decrypt(key, nonce, ciphertext, nil)
+}
+func DecryptForChannel(key ChannelKey, name string, nonce, ciphertext []byte) ([]byte, error) {
+	return decrypt(key, nonce, ciphertext, []byte("p2p-park/channel/v1:"+name))
+}
+func decrypt(key ChannelKey, nonce, ciphertext, ad []byte) ([]byte, error) {
 	aead, err := chacha20poly1305.NewX(key[:])
 	if err != nil {
 		return nil, err
@@ -63,7 +75,7 @@ func Decrypt(key ChannelKey, nonce, ciphertext []byte) ([]byte, error) {
 	if len(nonce) != aead.NonceSize() {
 		return nil, fmt.Errorf("invalid nonce length: %d", len(nonce))
 	}
-	pt, err := aead.Open(nil, nonce, ciphertext, nil)
+	pt, err := aead.Open(nil, nonce, ciphertext, ad)
 	if err != nil {
 		return nil, err
 	}

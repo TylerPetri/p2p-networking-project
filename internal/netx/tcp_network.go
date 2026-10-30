@@ -1,6 +1,7 @@
 package netx
 
 import (
+	"context"
 	"net"
 	"sync"
 	"time"
@@ -43,7 +44,12 @@ func (t *tcpNetwork) Accept() (Conn, error) {
 }
 
 func (t *tcpNetwork) Dial(addr Addr) (Conn, error) {
-	c, err := net.DialTimeout("tcp", string(addr), 5*time.Second)
+	return t.DialContext(context.Background(), addr)
+}
+
+func (t *tcpNetwork) DialContext(ctx context.Context, addr Addr) (Conn, error) {
+	d := net.Dialer{Timeout: 5 * time.Second}
+	c, err := d.DialContext(ctx, "tcp", string(addr))
 	if err != nil {
 		return nil, err
 	}

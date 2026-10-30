@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build and exercise three localhost nodes; no LAN discovery or external seeds."""
 import os
+import re
 from pathlib import Path
 import signal
 import subprocess
@@ -23,7 +24,9 @@ def main():
             for line in process.stdout:
                 with lock:
                     lines[name].append(line)
-                print(f"[{name}] {line}", end="", flush=True)
+                # Do not put even disposable demo channel keys in CI output.
+                if not re.fullmatch(r"\s*[0-9a-f]{64}\s*", line):
+                    print(f"[{name}] {line}", end="", flush=True)
 
         def wait_for(predicate, description):
             end = time.monotonic() + 15
@@ -58,12 +61,23 @@ def main():
                 line = next(s for s in lines["seed"] if "listening on " in s)
             addr = line.split("listening on ", 1)[1].split(",", 1)[0]
             alice = launch("alice", addr)
-            launch("bob", addr)
+            bob = launch("bob", addr)
             wait_for(lambda: all(any("connected to peer" in s for s in lines[n]) for n in ("alice", "bob")), "peer connections")
             alice.stdin.write("/say portfolio-demo-message\n")
             alice.stdin.flush()
             wait_for(lambda: any("portfolio-demo-message" in s for s in lines["bob"]), "Alice's gossip at Bob")
-            print("PASS: three local nodes connected; Bob received Alice's gossip.")
+            alice.stdin.write("/mkchan portfolio\n")
+            alice.stdin.flush()
+            wait_for(lambda: any(re.fullmatch(r"\s*[0-9a-f]{64}\s*", s) for s in lines["alice"]), "channel creation")
+            with lock:
+                key = next(s.strip() for s in lines["alice"] if re.fullmatch(r"\s*[0-9a-f]{64}\s*", s))
+            bob.stdin.write(f"/joinchan portfolio {key}\n")
+            bob.stdin.flush()
+            wait_for(lambda: any('joined channel "portfolio"' in s for s in lines["bob"]), "channel join")
+            alice.stdin.write("/encsay portfolio portfolio-encrypted-message\n")
+            alice.stdin.flush()
+            wait_for(lambda: any("portfolio-encrypted-message" in s for s in lines["bob"]), "authenticated channel decryption at Bob")
+            print("PASS: three local nodes connected; Bob received signed gossip and decrypted Alice's channel message.")
         finally:
             for p in processes:
                 if p.poll() is None:

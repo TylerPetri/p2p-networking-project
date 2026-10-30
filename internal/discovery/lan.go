@@ -71,6 +71,7 @@ func StartLANResponder(stop <-chan struct{}, cfg LANConfig, listenAddr, name str
 		defer udpConn.Close()
 
 		buf := make([]byte, 1024)
+		var lastReply time.Time
 
 		for {
 			select {
@@ -97,6 +98,10 @@ func StartLANResponder(stop <-chan struct{}, cfg LANConfig, listenAddr, name str
 				continue
 			}
 
+			if time.Since(lastReply) < 20*time.Millisecond {
+				continue
+			}
+			lastReply = time.Now()
 			resp := lanMessage{
 				Type:   "pong",
 				Name:   name,
@@ -163,7 +168,7 @@ func DiscoverLANPeers(cfg LANConfig, listenAddr, name string) ([]string, error) 
 	out := make([]string, 0, 4)
 	buf := make([]byte, 1024)
 
-	for {
+	for replies := 0; replies < 256; replies++ {
 		n, from, err := conn.ReadFromUDP(buf)
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
@@ -188,6 +193,9 @@ func DiscoverLANPeers(cfg LANConfig, listenAddr, name string) ([]string, error) 
 		}
 		seen[full] = struct{}{}
 		out = append(out, full)
+		if len(out) >= 64 {
+			break
+		}
 	}
 
 	return out, nil

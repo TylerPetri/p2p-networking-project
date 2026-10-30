@@ -26,11 +26,23 @@ func DefaultValueLookupConfig() ValueLookupConfig {
 }
 
 func (d *DHT) IterativeFindValue(ctx context.Context, n Sender, key [32]byte, cfg ValueLookupConfig) (*proto.DHTRecord, bool, error) {
-	if rec, ok := d.rs.Get(key, time.Now()); ok {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	if rec, ok := d.rs.Get(key, time.Now()); ok && d.ValidateRecordAgainstKey(key, rec) == nil {
 		ok = true
 		return rec, true, nil
 	}
 
+	if cfg.Alpha > 3 {
+		cfg.Alpha = 3
+	}
+	if cfg.K > 20 {
+		cfg.K = 20
+	}
+	if cfg.MaxRounds > 32 {
+		cfg.MaxRounds = 32
+	}
 	if cfg.Alpha <= 0 {
 		cfg.Alpha = 3
 	}
@@ -147,7 +159,12 @@ func (d *DHT) IterativeFindValue(ctx context.Context, n Sender, key [32]byte, cf
 		}
 
 		for i := 0; i < len(toQuery); i++ {
-			r := <-resCh
+			var r result
+			select {
+			case <-ctx.Done():
+				return nil, false, ctx.Err()
+			case r = <-resCh:
+			}
 			if r.err != nil || r.w.Kind != "VALUE" {
 				r.c.state = stFailed
 				continue
@@ -156,7 +173,12 @@ func (d *DHT) IterativeFindValue(ctx context.Context, n Sender, key [32]byte, cf
 
 			if r.w.Record != nil {
 				if err := d.ValidateRecordAgainstKey(key, r.w.Record); err == nil {
-					_ = d.rs.Put(key, r.w.Record, time.Now())
+					if err := d.rs.Put(key, r.w.Record, time.Now()); err != nil {
+						if retained, found := d.rs.Get(key, time.Now()); found && d.ValidateRecordAgainstKey(key, retained) == nil {
+							return retained, true, nil
+						}
+						return nil, false, err
+					}
 					ok = true
 					return r.w.Record, true, nil
 				}
@@ -169,7 +191,7 @@ func (d *DHT) IterativeFindValue(ctx context.Context, n Sender, key [32]byte, cf
 				nodes = nodes[:cfg.K*2]
 			}
 			for _, nd := range nodes {
-				if nd.NodeID == "" || nd.PeerID == "" || nd.Addr == "" {
+				if len(nd.NodeID) != 64 || len(nd.PeerID) != 64 || len(nd.Addr) > 128 || len(nd.Name) > 256 || nd.Addr == "" {
 					continue
 				}
 				if !NodeIDMatchesPeerID(nd.NodeID, nd.PeerID) {

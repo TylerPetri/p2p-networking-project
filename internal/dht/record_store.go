@@ -1,6 +1,7 @@
 package dht
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -16,9 +17,22 @@ type RecordStore interface {
 	Len() int
 }
 
+const MaxRecords = 256
+const MaxRecordBytes = 8 * 1024 * 1024
+
+var ErrStoreFull = errors.New("dht: record store full")
+
+func recordBytes(r *proto.DHTRecord) int {
+	if r == nil {
+		return 0
+	}
+	return len(r.Value) + len(r.PubKey) + len(r.Sig) + len(r.Name) + 128
+}
+
 type MemRecordStore struct {
-	mu   sync.RWMutex
-	data map[[32]byte]*proto.DHTRecord
+	bytes int
+	mu    sync.RWMutex
+	data  map[[32]byte]*proto.DHTRecord
 }
 
 func NewMemRecordStore() *MemRecordStore {
@@ -62,13 +76,25 @@ func (m *MemRecordStore) Get(key [32]byte, now time.Time) (*proto.DHTRecord, boo
 }
 
 func (m *MemRecordStore) Put(key [32]byte, rec *proto.DHTRecord, now time.Time) error {
-	if rec == nil {
-		return ErrBadRecord
+	if err := validateRecord(key, rec, now); err != nil {
+		return err
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Reclaim expired entries before admission; no extra maintenance worker needed.
+	for k, r := range m.data {
+		if r.ExpiresUnix != 0 && now.Unix() > r.ExpiresUnix {
+			m.bytes -= recordBytes(r)
+			delete(m.data, k)
+		}
+	}
+	oldRecord := m.data[key]
+	needed := m.bytes - recordBytes(oldRecord) + recordBytes(rec)
+	if needed > MaxRecordBytes || (oldRecord == nil && len(m.data) >= MaxRecords) {
+		return ErrStoreFull
+	}
 	// Enforce mutable seq rule (if same key exists)
 	if rec.Type == RecordMutable {
 		old := m.data[key]
@@ -79,6 +105,7 @@ func (m *MemRecordStore) Put(key [32]byte, rec *proto.DHTRecord, now time.Time) 
 		}
 	}
 
+	m.bytes = needed
 	m.data[key] = copyRecord(rec)
 	return nil
 }
@@ -86,6 +113,7 @@ func (m *MemRecordStore) Put(key [32]byte, rec *proto.DHTRecord, now time.Time) 
 func (m *MemRecordStore) Delete(key [32]byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.bytes -= recordBytes(m.data[key])
 	delete(m.data, key)
 	return nil
 }
@@ -100,6 +128,7 @@ func (m *MemRecordStore) SweepExpired(now time.Time) int {
 	n := 0
 	for k, rec := range m.data {
 		if rec != nil && rec.ExpiresUnix != 0 && now.Unix() > rec.ExpiresUnix {
+			m.bytes -= recordBytes(rec)
 			delete(m.data, k)
 			n++
 		}

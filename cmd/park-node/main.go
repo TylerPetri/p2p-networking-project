@@ -14,6 +14,8 @@ import (
 )
 
 func main() {
+	pinStr := flag.String("pins", "", "comma-separated address=Noise-ID pins for outbound connections")
+	discoveryStr := flag.String("discover-cidrs", "", "comma-separated numeric IP ranges approved for automatic discovery")
 	lan := flag.Bool("lan", true, "enable LAN discovery/responder (disable for isolated localhost demo)")
 	name := flag.String("name", "anon", "display name")
 	bind := flag.String("bind", ":0", "bind address (e.g. :0 for random port)")
@@ -23,6 +25,22 @@ func main() {
 	dataDir := flag.String("data", "", "data directory for persistent state (default: user config dir)")
 	flag.Parse()
 
+	pins := make(map[netx.Addr]string)
+	if *pinStr != "" {
+		for _, entry := range strings.Split(*pinStr, ",") {
+			parts := strings.SplitN(entry, "=", 2)
+			if len(parts) != 2 {
+				log.Fatal("invalid -pins entry; expected address=Noise-ID")
+			}
+			pins[netx.Addr(strings.TrimSpace(parts[0]))] = strings.TrimSpace(parts[1])
+		}
+	}
+	var discoveryCIDRs []string
+	if *discoveryStr != "" {
+		for _, s := range strings.Split(*discoveryStr, ",") {
+			discoveryCIDRs = append(discoveryCIDRs, strings.TrimSpace(s))
+		}
+	}
 	var bootstraps []netx.Addr
 	if *bootstrapStr != "" {
 		for _, part := range strings.Split(*bootstrapStr, ",") {
@@ -36,13 +54,15 @@ func main() {
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 
 	app, err := parknode.New(parknode.Config{
-		DataDir:    *dataDir,
-		DisableLAN: !*lan,
-		Name:       *name,
-		Bind:       *bind,
-		IsSeed:     *seed,
-		Bootstraps: bootstraps,
-		Debug:      *debug,
+		DataDir:        *dataDir,
+		DisableLAN:     !*lan,
+		PeerPins:       pins,
+		DiscoveryCIDRs: discoveryCIDRs,
+		Name:           *name,
+		Bind:           *bind,
+		IsSeed:         *seed,
+		Bootstraps:     bootstraps,
+		Debug:          *debug,
 	}, logger)
 	if err != nil {
 		log.Fatalf("create app: %v", err)

@@ -26,6 +26,15 @@ func DefaultLookupConfig() LookupConfig {
 
 // IterativeFindNode performs a Kademlia-style iterative lookup.
 func (d *DHT) IterativeFindNode(n Sender, targetHex string, cfg LookupConfig) ([]proto.DHTNode, error) {
+	if cfg.Alpha > 3 {
+		cfg.Alpha = 3
+	}
+	if cfg.K > 20 {
+		cfg.K = 20
+	}
+	if cfg.MaxRounds > 32 {
+		cfg.MaxRounds = 32
+	}
 	if cfg.Alpha <= 0 {
 		cfg.Alpha = 3
 	}
@@ -155,7 +164,7 @@ func (d *DHT) IterativeFindNode(n Sender, targetHex string, cfg LookupConfig) ([
 			}
 
 			for _, nd := range nodes {
-				if nd.NodeID == "" || nd.PeerID == "" || nd.Addr == "" {
+				if len(nd.NodeID) != 64 || len(nd.PeerID) != 64 || len(nd.Addr) > 128 || len(nd.Name) > 256 || nd.Addr == "" {
 					continue
 				}
 				if !NodeIDMatchesPeerID(nd.NodeID, nd.PeerID) {

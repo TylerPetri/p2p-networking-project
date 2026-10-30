@@ -34,6 +34,9 @@ func (n *Node) handleNatRegister(p *peer, env proto.Envelope) {
 		n.Logf("bad NatRegister from %s: %v", p.id, err)
 		return
 	}
+	if len(reg.Name) > 256 {
+		return
+	}
 	if reg.UserID == "" {
 		n.Logf("NatRegister from %s missing user_id", p.id)
 		return

@@ -28,3 +28,27 @@ func TestDecryptRejectsMalformedNonceAndTamper(t *testing.T) {
 		t.Fatal("accepted tamper")
 	}
 }
+
+func TestChannelAssociatedData(t *testing.T) {
+	key, _ := NewRandomKey()
+	nonce, ct, err := EncryptForChannel(key, "friends", []byte("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecryptForChannel(key, "other", nonce, ct); err == nil {
+		t.Fatal("ciphertext moved between channels")
+	}
+	if _, err := DecryptForChannel(key, "friends", nonce, ct); err != nil {
+		t.Fatal(err)
+	}
+}
+func FuzzChannelDecrypt(f *testing.F) {
+	f.Add([]byte{1}, []byte{2})
+	f.Add(make([]byte, 24), make([]byte, 16))
+	f.Fuzz(func(t *testing.T, nonce, ct []byte) {
+		if len(ct) > 128*1024 {
+			return
+		}
+		_, _ = DecryptForChannel(ChannelKey{}, "test", nonce, ct)
+	})
+}

@@ -13,6 +13,16 @@ const (
 )
 
 func (n *Node) sendAsyncWithPolicy(p *peer, env proto.Envelope, policy SendPolicy) {
+	if env.Type == proto.MsgGossip && len(env.Signature) == 0 {
+		var err error
+		env, err = n.signGossip(env)
+		if err != nil {
+			return
+		}
+	}
+	if !validEnvelopeSize(env) {
+		return
+	}
 	select {
 	case <-p.ctx.Done():
 		// peer is closing; just drop
@@ -25,8 +35,8 @@ func (n *Node) sendAsyncWithPolicy(p *peer, env proto.Envelope, policy SendPolic
 		return
 	default:
 		if policy == SendDisconnect {
-			// Important: do not call removePeer synchronously here.
-			go n.removePeer(p.id)
+			// No goroutine per dropped message: a slow peer cannot amplify workers.
+			n.removePeer(p.id, p)
 			n.Logf("dropping peer %s: send buffer full", p.id)
 		}
 		// else: drop the message
@@ -58,6 +68,16 @@ func (n *Node) SendToPeer(id string, env proto.Envelope) error {
 		return fmt.Errorf("unknown peer %q", id)
 	}
 
+	if env.Type == proto.MsgGossip && len(env.Signature) == 0 {
+		var err error
+		env, err = n.signGossip(env)
+		if err != nil {
+			return err
+		}
+	}
+	if !validEnvelopeSize(env) {
+		return ErrResourceLimit
+	}
 	n.sendAsync(p, env)
 	return nil
 }

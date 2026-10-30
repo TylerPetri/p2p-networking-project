@@ -3,6 +3,7 @@ package dht
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"p2p-park/internal/appdata"
 	"sort"
@@ -20,9 +21,10 @@ type nodeRecord struct {
 }
 
 type Store struct {
-	path  string
-	mu    sync.RWMutex
-	nodes map[string]*nodeRecord
+	path   string
+	saveMu sync.Mutex
+	mu     sync.RWMutex
+	nodes  map[string]*nodeRecord
 }
 
 func DefaultStorePath() string {
@@ -42,7 +44,15 @@ func NewStore(path string) *Store {
 }
 
 func (s *Store) load() error {
-	data, err := os.ReadFile(s.path)
+	f, err := os.Open(s.path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, 1024*1024+1))
+	if len(data) > 1024*1024 {
+		return fmt.Errorf("peer store too large")
+	}
 	if err != nil {
 		return nil
 	}
@@ -55,6 +65,9 @@ func (s *Store) load() error {
 	defer s.mu.Unlock()
 
 	for i := range recs {
+		if i >= 1024 {
+			break
+		}
 		r := recs[i]
 		if r.NodeID == "" || r.Addr == "" {
 			continue
@@ -65,6 +78,8 @@ func (s *Store) load() error {
 }
 
 func (s *Store) save() error {
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
 	s.mu.RLock()
 	recs := make([]nodeRecord, 0, len(s.nodes))
 	for _, r := range s.nodes {
@@ -90,11 +105,18 @@ func (s *Store) save() error {
 }
 
 func (s *Store) NoteSuccess(nodeID, addr, name string) {
+	if len(nodeID) > 64 || len(addr) > 128 || len(name) > 256 {
+		return
+	}
 	now := time.Now()
 
 	s.mu.Lock()
 	r := s.nodes[nodeID]
 	if r == nil {
+		if len(s.nodes) >= 1024 {
+			s.mu.Unlock()
+			return
+		}
 		r = &nodeRecord{NodeID: nodeID}
 		s.nodes[nodeID] = r
 	}
@@ -114,6 +136,10 @@ func (s *Store) NoteFailure(nodeID string) {
 	s.mu.Lock()
 	r := s.nodes[nodeID]
 	if r == nil {
+		if len(s.nodes) >= 1024 {
+			s.mu.Unlock()
+			return
+		}
 		r = &nodeRecord{NodeID: nodeID}
 		s.nodes[nodeID] = r
 	}

@@ -12,16 +12,26 @@ import (
 var ErrInvalidRecord = errors.New("dht: invalid record")
 
 func (d *DHT) ValidateRecordAgainstKey(key [32]byte, rec *proto.DHTRecord) error {
+	return validateRecord(key, rec, time.Now())
+}
+
+func validateRecord(key [32]byte, rec *proto.DHTRecord, now time.Time) error {
 	if rec == nil {
 		return ErrInvalidRecord
 	}
 
 	// Expiry sanity
-	if rec.ExpiresUnix != 0 && time.Now().Unix() > rec.ExpiresUnix {
+	if rec.ExpiresUnix != 0 && now.Unix() > rec.ExpiresUnix {
 		return ErrInvalidRecord
 	}
 
-	// Size caps (adjust later)
+	if len(rec.Name) > 256 || len(rec.PubKey) > ed25519.PublicKeySize || len(rec.Sig) > ed25519.SignatureSize {
+		return ErrRecordTooLarge
+	}
+	if rec.ExpiresUnix > now.Add(30*24*time.Hour).Unix() {
+		return ErrInvalidRecord
+	}
+	// Size caps
 	const maxValue = 64 * 1024
 	if len(rec.Value) > maxValue {
 		return ErrRecordTooLarge

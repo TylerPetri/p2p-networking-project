@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/ed25519"
@@ -9,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"p2p-park/internal/crypto/noiseconn"
 	"p2p-park/internal/netx"
 	"p2p-park/internal/proto"
+	"strconv"
 	"time"
 )
 
@@ -19,7 +20,7 @@ type deadlineConn interface {
 	SetReadDeadline(t time.Time) error
 }
 
-func (n *Node) establishPeer(rawConn netx.Conn, inbound bool) (*peer, io.Closer, error) {
+func (n *Node) establishPeer(rawConn netx.Conn, inbound bool, expected ...string) (*peer, io.Closer, error) {
 	id := n.Identity()
 
 	ip := proto.NoiseIdentityPayload{
@@ -59,12 +60,20 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool) (*peer, io.Closer,
 			_ = secure.Close()
 			return nil, nil, errors.New("invalid signing identity binding")
 		}
+		if len(rip.Name) > 256 {
+			_ = secure.Close()
+			return nil, nil, errors.New("peer name too long")
+		}
 		remoteName = rip.Name
 		remoteUserPub = ed25519.PublicKey(rip.UserPub)
 		remoteUserID = hex.EncodeToString(remoteUserPub)
 	}
 
-	dec := json.NewDecoder(bufio.NewReader(secure))
+	if len(expected) > 0 && expected[0] != "" && hex.EncodeToString(hs.RemoteStatic) != expected[0] {
+		_ = secure.Close()
+		return nil, nil, errors.New("peer pin mismatch")
+	}
+	dec := newEnvelopeDecoder(secure)
 	enc := json.NewEncoder(secure)
 
 	// hello handshake
@@ -101,6 +110,19 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool) (*peer, io.Closer,
 		_ = secure.Close()
 		return nil, nil, errors.New("incompatible protocol")
 	}
+	if len(hello.Listen) > 128 {
+		_ = secure.Close()
+		return nil, nil, errors.New("listen address too long")
+	}
+	// The peer may advertise a port, not an unrelated destination host.
+	_, port, portErr := net.SplitHostPort(hello.Listen)
+	remoteHost, _, hostErr := net.SplitHostPort(string(rawConn.RemoteAddr()))
+	portNumber, numErr := strconv.Atoi(port)
+	if portErr != nil || hostErr != nil || numErr != nil || portNumber < 1 || portNumber > 65535 {
+		_ = secure.Close()
+		return nil, nil, errors.New("invalid advertised listen endpoint")
+	}
+	hello.Listen = net.JoinHostPort(remoteHost, port)
 	peerID := env.FromID
 	pctx, cancel := context.WithCancel(n.ctx)
 	p := &peer{
@@ -111,7 +133,7 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool) (*peer, io.Closer,
 		conn:         secure,
 		writer:       enc,
 		reader:       dec,
-		sendCh:       make(chan proto.Envelope, 128), // TODO: make configurable
+		sendCh:       make(chan proto.Envelope, OutboundQueueSize), // TODO: make configurable
 		ctx:          pctx,
 		cancel:       cancel,
 		userPub:      remoteUserPub,
@@ -124,21 +146,22 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool) (*peer, io.Closer,
 		return nil, nil, nil
 	}
 
-	go p.writeLoop(n)
+	p.writerDone = make(chan struct{})
+	go func() { defer close(p.writerDone); p.writeLoop(n) }()
 	return p, secure, nil
 }
 
 func (n *Node) runPeerReadLoop(p *peer) {
-	dec := p.reader
-
 	for {
 		select {
 		case <-n.ctx.Done():
 			return
+		case <-p.ctx.Done():
+			return
 		default:
 		}
 		var env proto.Envelope
-		if err := dec.Decode(&env); err != nil {
+		if err := n.decodePeer(p, &env); err != nil {
 			n.Logf("read from %s failed: %v", p.id, err)
 			return
 		}
@@ -146,7 +169,7 @@ func (n *Node) runPeerReadLoop(p *peer) {
 	}
 }
 
-func (n *Node) readEnvelopeWithTimeout(rawConn netx.Conn, dec *json.Decoder, timeout time.Duration) (proto.Envelope, error) {
+func (n *Node) readEnvelopeWithTimeout(rawConn netx.Conn, dec interface{ Decode(any) error }, timeout time.Duration) (proto.Envelope, error) {
 	if dc, ok := rawConn.(deadlineConn); ok {
 		_ = dc.SetReadDeadline(time.Now().Add(timeout))
 		defer func() { _ = dc.SetReadDeadline(time.Time{}) }()

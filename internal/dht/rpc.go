@@ -89,6 +89,8 @@ func (d *DHT) QueryFindNode(n Sender, peerID string, targetHex string, timeout t
 	case resp := <-ch:
 		ok = true
 		return resp, nil
+	case <-senderDone(n):
+		return proto.DHTWire{}, context.Canceled
 	case <-timer.C:
 		return proto.DHTWire{}, context.DeadlineExceeded
 	}
@@ -124,6 +126,8 @@ func (d *DHT) QueryPing(n Sender, peerID string, timeout time.Duration) (proto.D
 	case resp := <-ch:
 		ok = true
 		return resp, nil
+	case <-senderDone(n):
+		return proto.DHTWire{}, context.Canceled
 	case <-timer.C:
 		return proto.DHTWire{}, context.DeadlineExceeded
 	}
@@ -160,6 +164,8 @@ func (d *DHT) QueryFindValue(n Sender, peerID string, keyHex string, timeout tim
 	case resp := <-ch:
 		ok = true
 		return resp, nil
+	case <-senderDone(n):
+		return proto.DHTWire{}, context.Canceled
 	case <-timer.C:
 		return proto.DHTWire{}, context.DeadlineExceeded
 	}
@@ -197,7 +203,16 @@ func (d *DHT) QueryStore(n Sender, peerID string, keyHex string, rec *proto.DHTR
 	case resp := <-ch:
 		ok = true
 		return resp, nil
+	case <-senderDone(n):
+		return proto.DHTWire{}, context.Canceled
 	case <-timer.C:
 		return proto.DHTWire{}, context.DeadlineExceeded
 	}
+}
+
+func senderDone(n Sender) <-chan struct{} {
+	if s, ok := n.(interface{ Done() <-chan struct{} }); ok {
+		return s.Done()
+	}
+	return nil
 }

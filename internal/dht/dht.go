@@ -142,3 +142,6 @@ func WithDiversityLimit(maxPerSubnet int) Option {
 		d.rt.SetDiversityLimit(maxPerSubnet)
 	}
 }
+
+// ForgetPeer releases rate-limit identities on disconnect; routing remains a hint.
+func (d *DHT) ForgetPeer(id string) { d.rlMu.Lock(); delete(d.rl, id); d.rlMu.Unlock() }

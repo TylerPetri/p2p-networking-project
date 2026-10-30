@@ -296,7 +296,7 @@ func (a *App) sendEncrypted(chName, msg string) {
 		"timestamp": time.Now().Unix(),
 	})
 
-	nonce, ct, err := channel.Encrypt(key, plaintext)
+	nonce, ct, err := channel.EncryptForChannel(key, chName, plaintext)
 	if err != nil {
 		a.ui.Printf("encrypt failed: %v\n", err)
 		return

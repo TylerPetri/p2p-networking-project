@@ -27,6 +27,10 @@ func (n *Node) acceptLoop() {
 			continue
 		}
 
-		go n.handleConn(conn, true)
+		if !n.reserveConnection() {
+			_ = conn.Close()
+			continue
+		}
+		go func() { defer n.releaseConnection(); n.runConn(conn, true, "") }()
 	}
 }

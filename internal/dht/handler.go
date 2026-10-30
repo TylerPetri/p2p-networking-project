@@ -8,6 +8,9 @@ import (
 )
 
 func (d *DHT) HandleDHT(n Sender, fromPeerID string, fromAddr string, fromName string, env proto.Envelope) {
+	if len(env.Payload) > 128*1024 {
+		return
+	}
 	var w proto.DHTWire
 	if err := json.Unmarshal(env.Payload, &w); err != nil {
 		n.Logf("dht: bad payload from %s: %v", fromPeerID, err)
@@ -18,6 +21,10 @@ func (d *DHT) HandleDHT(n Sender, fromPeerID string, fromAddr string, fromName s
 	d.rlMu.Lock()
 	b := d.rl[fromPeerID]
 	if b == nil {
+		if len(d.rl) >= 1024 {
+			d.rlMu.Unlock()
+			return
+		}
 		b = &tokenBucket{}
 		d.rl[fromPeerID] = b
 	}
@@ -47,7 +54,13 @@ func (d *DHT) HandleDHT(n Sender, fromPeerID string, fromAddr string, fromName s
 	}
 
 	// Do not perform a blocking eviction ping before delivering a pending reply.
-	d.ObservePeer(n, fromPeerID, fromAddr, fromName)
+	switch w.Kind {
+	case "PING", "FIND_NODE", "FIND_VALUE", "STORE":
+	default:
+		return
+	}
+	// A request handler must not wait for a ping response on its own blocked reader.
+	d.OnPeerSeen(fromPeerID, fromAddr, fromName)
 	switch w.Kind {
 	case "PING":
 		reply := proto.DHTWire{Kind: "PONG", RPCID: w.RPCID}

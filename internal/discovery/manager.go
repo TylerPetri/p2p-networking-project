@@ -56,7 +56,15 @@ func (m *Manager) Run(n *p2p.Node) {
 			addrs = append(addrs, m.Seeds...)
 
 			seen := make(map[string]struct{})
-			for _, a := range addrs {
+			for i, a := range addrs {
+				select {
+				case <-n.Done():
+					return
+				default:
+				}
+				if i >= 16 {
+					break
+				}
 				if a == "" || a == string(listenAddr) {
 					continue
 				}
@@ -65,8 +73,8 @@ func (m *Manager) Run(n *p2p.Node) {
 				}
 				seen[a] = struct{}{}
 
-				go func(addr string) {
-					if err := n.ConnectTo(netx.Addr(addr)); err != nil {
+				func(addr string) {
+					if err := n.ConnectDiscovered(netx.Addr(addr), ""); err != nil {
 						if n.Debug() {
 							fmt.Printf("[DISCOVERY] connect to %s failed: %v\n", addr, err)
 						}

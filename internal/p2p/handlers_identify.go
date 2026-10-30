@@ -31,6 +31,9 @@ func (n *Node) handleIdentify(p *peer, env proto.Envelope) {
 		return
 	}
 
+	if len(ident.Name) > 256 {
+		return
+	}
 	n.mu.Lock()
 	if !sameUserIdentity(p.userPub, ident.UserPub) {
 		n.mu.Unlock()

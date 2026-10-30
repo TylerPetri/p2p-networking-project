@@ -20,7 +20,10 @@ func VerifyGrant(g proto.QuizGrant) error {
 	if g.GrantID == "" || g.QuizID == "" || g.GrantorID == "" || g.RecipientID == "" {
 		return ErrInvalidGrant
 	}
-	if g.Points == 0 {
+	if !canonicalHex(g.GrantID, 16) || !canonicalHex(g.QuizID, 16) || !canonicalHex(g.RecipientID, 32) || !canonicalHex(g.GrantorID, 32) || len(g.Signature) != ed25519.SignatureSize {
+		return ErrInvalidGrant
+	}
+	if g.Points <= 0 || g.Points > 1_000_000_000 {
 		return ErrInvalidGrant
 	}
 
@@ -40,3 +43,11 @@ func VerifyGrant(g proto.QuizGrant) error {
 	}
 	return nil
 }
+
+// Reject alternate/NUL-delimited encodings before the legacy canonical signer.
+func canonicalHex(s string, n int) bool {
+	b, err := hex.DecodeString(s)
+	return err == nil && len(b) == n && hex.EncodeToString(b) == s
+}
+
+const MaxGrants = 10000
