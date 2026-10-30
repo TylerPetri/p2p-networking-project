@@ -60,6 +60,9 @@ func Decrypt(key ChannelKey, nonce, ciphertext []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(nonce) != aead.NonceSize() {
+		return nil, fmt.Errorf("invalid nonce length: %d", len(nonce))
+	}
 	pt, err := aead.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
 		return nil, err

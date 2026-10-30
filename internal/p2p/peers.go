@@ -37,6 +37,7 @@ func (n *Node) removePeer(id string) {
 			delete(n.peersByUserID, uid)
 		}
 	}
+	name := p.name
 	n.mu.Unlock()
 
 	p.once.Do(func() {
@@ -44,7 +45,7 @@ func (n *Node) removePeer(id string) {
 			p.cancel()
 		}
 		_ = p.conn.Close()
-		n.emit(Event{Type: EventPeerDisconnected, PeerID: p.id, PeerAddr: string(p.addr), PeerName: p.name})
+		n.emit(Event{Type: EventPeerDisconnected, PeerID: p.id, PeerAddr: string(p.addr), PeerName: name})
 	})
 }
 

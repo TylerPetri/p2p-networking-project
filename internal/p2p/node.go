@@ -31,6 +31,7 @@ type peer struct {
 	observedAddr netx.Addr
 	conn         io.ReadWriteCloser // stream type for Noise secure encrypted
 	writer       *json.Encoder
+	reader       *json.Decoder
 
 	sendCh chan proto.Envelope
 	ctx    context.Context
@@ -134,6 +135,15 @@ func (n *Node) Start() error {
 // Stop shuts down the node.
 func (n *Node) Stop() error {
 	n.cancel()
+	n.mu.RLock()
+	peers := make([]*peer, 0, len(n.peers))
+	for _, p := range n.peers {
+		peers = append(peers, p)
+	}
+	n.mu.RUnlock()
+	for _, p := range peers {
+		_ = p.conn.Close()
+	}
 	return n.cfg.Network.Close()
 }
 
@@ -170,3 +180,6 @@ func (n *Node) relay(originID string, env proto.Envelope) {
 		n.sendAsync(p, env)
 	}
 }
+
+// Done signals node shutdown to discovery workers.
+func (n *Node) Done() <-chan struct{} { return n.ctx.Done() }

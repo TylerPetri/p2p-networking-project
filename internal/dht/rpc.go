@@ -18,13 +18,13 @@ const (
 	maxInflightPerPeer = 4
 )
 
-func (d *DHT) beginRPC(peerID, rpcid string, ch chan proto.DHTWire) error {
+func (d *DHT) beginRPC(peerID, rpcid string, ch chan proto.DHTWire, kind string) error {
 	d.pendingMu.Lock()
 	if len(d.pending) >= maxPendingRPCs {
 		d.pendingMu.Unlock()
 		return ErrTooManyPending
 	}
-	d.pending[rpcid] = ch
+	d.pending[rpcid] = pendingRPC{peerID: peerID, kind: kind, ch: ch}
 	d.pendingMu.Unlock()
 
 	// Bound per-peer inflight.
@@ -47,6 +47,9 @@ func (d *DHT) endRPC(peerID, rpcid string) {
 	d.inflightMu.Lock()
 	if d.inflight[peerID] > 0 {
 		d.inflight[peerID]--
+		if d.inflight[peerID] == 0 {
+			delete(d.inflight, peerID)
+		}
 	}
 	d.inflightMu.Unlock()
 	// Ensure pending cleared (idempotent).
@@ -60,7 +63,7 @@ func (d *DHT) QueryFindNode(n Sender, peerID string, targetHex string, timeout t
 	defer func() { d.metrics.IncRPC("FIND_NODE", ok) }()
 	rpcid := newRPCID()
 	ch := make(chan proto.DHTWire, 1)
-	if err := d.beginRPC(peerID, rpcid, ch); err != nil {
+	if err := d.beginRPC(peerID, rpcid, ch, "NODES"); err != nil {
 		return proto.DHTWire{}, err
 	}
 	defer d.endRPC(peerID, rpcid)
@@ -96,7 +99,7 @@ func (d *DHT) QueryPing(n Sender, peerID string, timeout time.Duration) (proto.D
 	defer func() { d.metrics.IncRPC("PING", ok) }()
 	rpcid := newRPCID()
 	ch := make(chan proto.DHTWire, 1)
-	if err := d.beginRPC(peerID, rpcid, ch); err != nil {
+	if err := d.beginRPC(peerID, rpcid, ch, "PONG"); err != nil {
 		return proto.DHTWire{}, err
 	}
 	defer d.endRPC(peerID, rpcid)
@@ -131,7 +134,7 @@ func (d *DHT) QueryFindValue(n Sender, peerID string, keyHex string, timeout tim
 	defer func() { d.metrics.IncRPC("FIND_VALUE", ok) }()
 	rpcid := newRPCID()
 	ch := make(chan proto.DHTWire, 1)
-	if err := d.beginRPC(peerID, rpcid, ch); err != nil {
+	if err := d.beginRPC(peerID, rpcid, ch, "VALUE"); err != nil {
 		return proto.DHTWire{}, err
 	}
 	defer d.endRPC(peerID, rpcid)
@@ -167,7 +170,7 @@ func (d *DHT) QueryStore(n Sender, peerID string, keyHex string, rec *proto.DHTR
 	defer func() { d.metrics.IncRPC("STORE", ok) }()
 	rpcid := newRPCID()
 	ch := make(chan proto.DHTWire, 1)
-	if err := d.beginRPC(peerID, rpcid, ch); err != nil {
+	if err := d.beginRPC(peerID, rpcid, ch, "STORE_RESULT"); err != nil {
 		return proto.DHTWire{}, err
 	}
 	defer d.endRPC(peerID, rpcid)

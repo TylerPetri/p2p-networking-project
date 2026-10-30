@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"net"
+	"strconv"
 	"strings"
 )
 
@@ -19,9 +20,17 @@ func listenPortOnly(listenAddr string) string {
 }
 
 func normalizeListenFromPong(sender *net.UDPAddr, listen string) string {
-	// if listen is ":port", join with sender IP
-	if strings.HasPrefix(listen, ":") && sender != nil && sender.IP != nil {
-		return net.JoinHostPort(sender.IP.String(), strings.TrimPrefix(listen, ":"))
+	// A UDP advertisement may choose a port, never a third-party dial target.
+	if sender == nil || sender.IP == nil {
+		return ""
 	}
-	return listen
+	_, port, err := net.SplitHostPort(listen)
+	if err != nil {
+		return ""
+	}
+	n, err := strconv.Atoi(port)
+	if err != nil || n <= 0 || n > 65535 {
+		return ""
+	}
+	return net.JoinHostPort(sender.IP.String(), port)
 }

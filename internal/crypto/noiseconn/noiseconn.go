@@ -5,73 +5,108 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/flynn/noise"
 )
 
-// SecureConn wraps an underlying stream with Noise cipher states.
+// MaxFrameSize bounds ciphertext allocation before any peer-controlled body is read.
+// Noise messages are limited to 65535 bytes, including the 16-byte AEAD tag.
+const MaxFrameSize = 65535
+const maxPlaintextSize = MaxFrameSize - 16
+
+// SecureConn is a byte stream. Readers and writers are serialized independently;
+// one reader and one writer can progress concurrently. Close unblocks network I/O.
+// Callers own deadlines/cancellation on the underlying stream.
 type SecureConn struct {
-	underlying io.ReadWriteCloser
-
-	readCS  *noise.CipherState
-	writeCS *noise.CipherState
+	underlying        io.ReadWriteCloser
+	readCS, writeCS   *noise.CipherState
+	readMu, writeMu   sync.Mutex
+	pending           []byte
+	readErr, writeErr error
 }
 
-// Read reads a single length-prefixed encrypted frame and decrypts it.
 func (c *SecureConn) Read(p []byte) (int, error) {
-	var lenBuf [4]byte
-	if _, err := io.ReadFull(c.underlying, lenBuf[:]); err != nil {
-		return 0, err
+	if len(p) == 0 {
+		return 0, nil
 	}
-	n := binary.BigEndian.Uint32(lenBuf[:])
-	if n == 0 {
-		return 0, fmt.Errorf("invalid frame length")
+	c.readMu.Lock()
+	defer c.readMu.Unlock()
+	for len(c.pending) == 0 {
+		if c.readErr != nil {
+			return 0, c.readErr
+		}
+		var prefix [4]byte
+		_, err := io.ReadFull(c.underlying, prefix[:])
+		if err != nil {
+			return c.failRead(err)
+		}
+		n := binary.BigEndian.Uint32(prefix[:])
+		if n < 16 || n > MaxFrameSize {
+			return c.failRead(fmt.Errorf("invalid frame length: %d", n))
+		}
+		ct := make([]byte, int(n))
+		if _, err := io.ReadFull(c.underlying, ct); err != nil {
+			return c.failRead(err)
+		}
+		pt, err := c.readCS.Decrypt(nil, nil, ct)
+		if err != nil {
+			return c.failRead(err)
+		}
+		c.pending = pt
 	}
-
-	ct := make([]byte, n)
-	if _, err := io.ReadFull(c.underlying, ct); err != nil {
-		return 0, err
-	}
-
-	pt, err := c.readCS.Decrypt(nil, nil, ct)
-	if err != nil {
-		return 0, err
-	}
-
-	if len(pt) > len(p) {
-		copy(p, pt[:len(p)])
-		return len(p), io.ErrShortBuffer
-	}
-	copy(p, pt)
-	return len(pt), nil
+	n := copy(p, c.pending)
+	c.pending = c.pending[n:]
+	return n, nil
 }
 
-// Write encrypts p as a single frame and writes it with a length prefix.
+func (c *SecureConn) failRead(err error) (int, error) {
+	c.readErr = err
+	_ = c.underlying.Close()
+	return 0, err
+}
+
+// Write splits a byte stream into bounded frames. A failed frame makes the
+// stream unusable: retrying after advancing a Noise nonce would desynchronize it.
 func (c *SecureConn) Write(p []byte) (int, error) {
-	ct, err := c.writeCS.Encrypt(nil, nil, p)
-	if err != nil {
-		return 0, err
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	if c.writeErr != nil {
+		return 0, c.writeErr
 	}
-	var lenBuf [4]byte
-	binary.BigEndian.PutUint32(lenBuf[:], uint32(len(ct)))
-
-	if _, err := c.underlying.Write(lenBuf[:]); err != nil {
-		return 0, err
+	written := 0
+	for len(p) > 0 {
+		size := len(p)
+		if size > maxPlaintextSize {
+			size = maxPlaintextSize
+		}
+		ct, err := c.writeCS.Encrypt(nil, nil, p[:size])
+		if err == nil {
+			var prefix [4]byte
+			binary.BigEndian.PutUint32(prefix[:], uint32(len(ct)))
+			err = writeFull(c.underlying, prefix[:])
+			if err == nil {
+				err = writeFull(c.underlying, ct)
+			}
+		}
+		if err != nil {
+			c.writeErr = err
+			_ = c.underlying.Close()
+			return written, err
+		}
+		written += size
+		p = p[size:]
 	}
-	if _, err := c.underlying.Write(ct); err != nil {
-		return 0, err
-	}
-	return len(p), nil
+	return written, nil
 }
 
-func (c *SecureConn) Close() error {
-	return c.underlying.Close()
-}
+func (c *SecureConn) Close() error { return c.underlying.Close() }
 
 // HandshakeResult contains the secure connection plus the remote's identity payload.
 type HandshakeResult struct {
 	Conn          *SecureConn
 	RemotePayload []byte
+	RemoteStatic  []byte // authenticated remote Noise static public key
 }
 
 // NewSecureClient runs a Noise_XX handshake as initiator and attaches localPayload
@@ -111,7 +146,8 @@ func NewSecureClient(
 	if err != nil {
 		return nil, err
 	}
-	if _, _, _, err := hs.ReadMessage(nil, msg2); err != nil {
+	remotePayload, _, _, err := hs.ReadMessage(nil, msg2)
+	if err != nil {
 		return nil, err
 	}
 
@@ -132,7 +168,8 @@ func NewSecureClient(
 			readCS:     cs2, // receiving
 			writeCS:    cs1, // sending
 		},
-		RemotePayload: nil, // XX here carries payload only from initiator -> responder
+		RemotePayload: remotePayload,
+		RemoteStatic:  append([]byte(nil), hs.PeerStatic()...),
 	}, nil
 }
 
@@ -140,7 +177,7 @@ func NewSecureClient(
 // plus the remote's identity payload (from initiator).
 func NewSecureServer(
 	underlying io.ReadWriteCloser,
-	staticPriv, staticPub, _ []byte, // localPayload currently unused
+	staticPriv, staticPub, localPayload []byte,
 ) (*HandshakeResult, error) {
 	cs := noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashBLAKE2s)
 
@@ -167,7 +204,7 @@ func NewSecureServer(
 	}
 
 	// -> e, ee, s, es
-	msg2, _, _, err := hs.WriteMessage(nil, nil)
+	msg2, _, _, err := hs.WriteMessage(nil, localPayload)
 	if err != nil {
 		return nil, err
 	}
@@ -194,5 +231,6 @@ func NewSecureServer(
 			writeCS:    cs2, // sending
 		},
 		RemotePayload: remotePayload,
+		RemoteStatic:  append([]byte(nil), hs.PeerStatic()...),
 	}, nil
 }

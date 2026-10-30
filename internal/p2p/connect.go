@@ -1,11 +1,17 @@
 package p2p
 
 import (
+	"context"
+	"time"
+
 	"p2p-park/internal/netx"
 )
 
 // ConnectTo allows manual dialing (used by discovery/bootstraps).
 func (n *Node) ConnectTo(addr netx.Addr) error {
+	if err := n.ctx.Err(); err != nil {
+		return err
+	}
 	conn, err := n.cfg.Network.Dial(addr)
 	if err != nil {
 		n.Logf("dial %s failed: %v", addr, err)
@@ -16,7 +22,12 @@ func (n *Node) ConnectTo(addr netx.Addr) error {
 }
 
 func (n *Node) handleConn(rawConn netx.Conn, inbound bool) {
+	stopCancel := context.AfterFunc(n.ctx, func() { _ = rawConn.Close() })
+	defer stopCancel()
+	// Include Noise and both Hello reads/writes, even for transports without deadlines.
+	setupTimer := time.AfterFunc(5*time.Second, func() { _ = rawConn.Close() })
 	p, secureCloser, err := n.establishPeer(rawConn, inbound)
+	setupTimer.Stop()
 	if err != nil {
 		n.Logf("conn setup failed (inbound=%v): %v", inbound, err)
 		_ = rawConn.Close()
@@ -43,7 +54,10 @@ func (n *Node) handleConn(rawConn netx.Conn, inbound bool) {
 		n.Logf("send identify to %s failed: %v", p.id, err)
 	}
 
-	n.Logf("connected to peer id=%s name=%s addr=%s inbound=%v", p.id, p.name, p.addr, inbound)
+	n.mu.RLock()
+	name := p.name
+	n.mu.RUnlock()
+	n.Logf("connected to peer id=%s name=%s addr=%s inbound=%v", p.id, name, p.addr, inbound)
 
 	if err := n.sendPeerList(p); err != nil {
 		n.Logf("send peer list to %s failed: %v", p.id, err)

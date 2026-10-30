@@ -41,6 +41,9 @@ func (n *Node) handleNatRegister(p *peer, env proto.Envelope) {
 
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if reg.UserID != p.userID {
+		return
+	}
 	if n.natByUserID == nil {
 		n.natByUserID = make(map[string]*peer)
 	}

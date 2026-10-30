@@ -50,7 +50,10 @@ func (n *Node) handleEnvelope(p *peer, env proto.Envelope) {
 		}
 	case proto.MsgDHT:
 		if n.dht != nil {
-			n.dht.HandleDHT(n, p.id, string(p.addr), p.name, env)
+			n.mu.RLock()
+			name := p.name
+			n.mu.RUnlock()
+			n.dht.HandleDHT(n, p.id, string(p.addr), name, env)
 		}
 		return
 

@@ -30,7 +30,11 @@ func NewManager(store *PeerStore, lanCfg LANConfig) *Manager {
 // Run starts the periodic discovery loop.
 func (m *Manager) Run(n *p2p.Node) {
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		select {
+		case <-n.Done():
+			return
+		case <-time.After(500 * time.Millisecond):
+		}
 
 		for {
 			// 1) LAN
@@ -73,7 +77,11 @@ func (m *Manager) Run(n *p2p.Node) {
 				}(a)
 			}
 
-			time.Sleep(m.Interval)
+			select {
+			case <-n.Done():
+				return
+			case <-time.After(m.Interval):
+			}
 		}
 	}()
 }

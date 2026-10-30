@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -22,8 +23,9 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool) (*peer, io.Closer,
 	id := n.Identity()
 
 	ip := proto.NoiseIdentityPayload{
-		Name:    n.cfg.Name,
-		UserPub: id.SignPub,
+		Name:      n.cfg.Name,
+		UserPub:   id.SignPub,
+		Signature: ed25519.Sign(id.SignPriv, identityBinding(id.NoisePub[:])),
 	}
 	payloadBytes, err := json.Marshal(ip)
 	if err != nil {
@@ -52,6 +54,10 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool) (*peer, io.Closer,
 		if err := json.Unmarshal(hs.RemotePayload, &rip); err != nil {
 			_ = secure.Close()
 			return nil, nil, err
+		}
+		if !validIdentityPayload(rip, hs.RemoteStatic) {
+			_ = secure.Close()
+			return nil, nil, errors.New("invalid signing identity binding")
 		}
 		remoteName = rip.Name
 		remoteUserPub = ed25519.PublicKey(rip.UserPub)
@@ -83,6 +89,18 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool) (*peer, io.Closer,
 		return nil, nil, err
 	}
 
+	if env.FromID != hex.EncodeToString(hs.RemoteStatic) {
+		_ = secure.Close()
+		return nil, nil, errors.New("hello peer ID does not match Noise static key")
+	}
+	if len(remoteUserPub) != ed25519.PublicKeySize {
+		_ = secure.Close()
+		return nil, nil, errors.New("missing signing identity")
+	}
+	if hello.Protocol != n.cfg.Protocol {
+		_ = secure.Close()
+		return nil, nil, errors.New("incompatible protocol")
+	}
 	peerID := env.FromID
 	pctx, cancel := context.WithCancel(n.ctx)
 	p := &peer{
@@ -92,6 +110,7 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool) (*peer, io.Closer,
 		observedAddr: rawConn.RemoteAddr(),
 		conn:         secure,
 		writer:       enc,
+		reader:       dec,
 		sendCh:       make(chan proto.Envelope, 128), // TODO: make configurable
 		ctx:          pctx,
 		cancel:       cancel,
@@ -100,6 +119,7 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool) (*peer, io.Closer,
 	}
 
 	if !n.addPeer(p) {
+		cancel()
 		_ = secure.Close()
 		return nil, nil, nil
 	}
@@ -109,7 +129,7 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool) (*peer, io.Closer,
 }
 
 func (n *Node) runPeerReadLoop(p *peer) {
-	dec := json.NewDecoder(bufio.NewReader(p.conn))
+	dec := p.reader
 
 	for {
 		select {
@@ -170,3 +190,15 @@ func (n *Node) sendHello(enc *json.Encoder) error {
 	}
 	return enc.Encode(env)
 }
+
+func identityBinding(static []byte) []byte {
+	return append([]byte("p2p-park/noise-signing-identity/v1\x00"), static...)
+}
+
+func validIdentityPayload(p proto.NoiseIdentityPayload, static []byte) bool {
+	return len(static) == 32 && len(p.UserPub) == ed25519.PublicKeySize &&
+		ed25519.Verify(ed25519.PublicKey(p.UserPub), identityBinding(static), p.Signature)
+}
+
+// Identify may update a display name, but cannot replace the handshake identity.
+func sameUserIdentity(a, b []byte) bool { return bytes.Equal(a, b) }

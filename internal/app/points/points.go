@@ -66,7 +66,7 @@ func verifySigned(s proto.SignedPointsSnapshot) bool {
 	}
 
 	expectedID := p2p.PlayerIDFromPub(pub)
-	return s.Snapshot.PlayerID != expectedID
+	return s.Snapshot.PlayerID == expectedID
 }
 
 // AddSelf increments our own points by delta and returns a signed snapshot.
