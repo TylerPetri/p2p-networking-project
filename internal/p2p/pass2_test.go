@@ -224,9 +224,12 @@ func TestCorrectOutboundPinConnects(t *testing.T) {
 	if err := client.ConnectTo(server.ListenAddr()); err != nil {
 		t.Fatal(err)
 	}
-	waitPeers(t, client, 1, time.Second)
+	deadline := time.Now().Add(time.Second)
+	for !client.hasPeer(server.ID()) && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
 	if !client.hasPeer(server.ID()) {
-		t.Fatal("wrong peer admitted")
+		t.Fatal("expected pinned peer did not connect")
 	}
 }
 

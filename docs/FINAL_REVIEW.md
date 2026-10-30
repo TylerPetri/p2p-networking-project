@@ -31,6 +31,17 @@ mutable record must check that type and its expected key. This is acceptable for
 the controlled DHT experiment, not a signed mutable database guarantee. A future
 typed API or domain-separated key namespace would be a separate protocol change.
 
+## Verification fixture correction
+
+Running ordinary/race/repeat test processes concurrently exposed a shared persisted
+peer inventory: one process discovered another process's live fixture nodes,
+invalidating triangle peer counts and making the positive pin test observe an
+unrelated permitted connection first. This was not evidence that a pin admitted
+a wrong key. P2P and discovery test processes now receive separate temporary
+`P2P_PARK_DATA_DIR` directories before the path singleton is initialized, removed
+on normal completion. The pin success assertion waits for the specific expected
+ID. No production admission or discovery policy changed for this fixture fix.
+
 ## Protection checks against implementation
 
 | Area | Final assessment |
