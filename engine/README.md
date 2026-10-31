@@ -30,7 +30,7 @@ All nodes must use the same network ID and protocol `p2p-engine/0.1.0`.
 | `PeerPins` | Address to expected Noise PeerID; obtain through a trusted channel. |
 | `DiscoveryCIDRs` | Additional numeric referral scopes; defaults remain same-host / loopback policy. Not a firewall on explicit `Connect`. |
 | `Admission` | `Open` (default) or `Restricted`. |
-| `ApprovedPeers` | Static Noise PeerIDs; empty restricted list denies all remote peers. Both endpoints apply their own policy. |
+| `ApprovedPeers` | Map of Noise PeerID to hex Ed25519 SigningID. Both keys must be approved; empty restricted map denies all remote peers. Each endpoint applies its own policy. |
 | `MaxConnections` | Pending + established session budget; nonpositive defaults to 32. |
 | `MessageTimeout` | Deadline for a complete incoming envelope, including idle wait; nonpositive defaults to two minutes. |
 | `PeerStorePath` | Optional routing-peer persistence; empty disables disk peer store. Never share this path across nodes/overlays. |
@@ -42,8 +42,22 @@ complete file. Requires a local filesystem supporting hard links; existing files
 must be regular with no group/other permission bits. Keep parent paths trusted.
 Keys are plaintext, not encrypted or securely erased; directory durability across
 power loss and malicious local filesystem changes are not guaranteed. Back up
-privately; loss changes identity. Never commit this file. `PeerID` and
+privately; loss changes identity. Never commit this file. `PeerID`, `SigningID` and
 `SigningPublicKey` expose only public identity; returned public-key bytes are copied.
+
+For restricted admission, exchange both public IDs over a trusted channel:
+
+```go
+cfg.Admission = engine.Restricted
+cfg.ApprovedPeers = map[string]string{
+    approvedIdentity.PeerID(): approvedIdentity.SigningID(),
+}
+```
+
+A signature over a public Noise key alone is not transferable proof of possessing
+that Noise private key. Noise XX proves it on direct sessions; restricted relay
+trust requires the separately approved signing key. Do not learn approvals from
+untrusted gossip. `Engine.SigningID()` identifies its own signing key.
 
 ## Lifecycle and concurrency
 
@@ -85,9 +99,13 @@ No callbacks are invoked by the API.
   Outbound messages retain frame/envelope caps, signature/binding, network domain,
   origin admission, rate limiting and replay checks. Receiving applications get
   only verified gossip in their application namespace via `Messages`.
-- `Message.FromPeer` is a verified Noise origin and `SigningKey` is its bound
-  Ed25519 public key. `Data` / `SigningKey` belong to the consumer. Validate data,
-  authority and idempotency separately. Topics cannot invoke core control handlers.
+- `Message.SigningKey` is the authenticated Ed25519 origin. `ClaimedPeerID` is
+  the signed Noise-ID claim, not standalone proof of its private-key possession
+  for an unknown relayed origin. Restricted approvals pin the pair; messages
+  contradicting a currently connected peer's signing identity are rejected.
+  Authorize by the trusted signing key, not an unverified transport-ID claim.
+  `Data` / `SigningKey` belong to the consumer. Validate data, authority and
+  idempotency separately. Topics cannot invoke core control handlers.
 - Message/event streams each buffer 128 entries and drop on saturation; internal
   incoming queues are also bounded. Per-peer output queues hold 16 envelopes;
   saturation disconnects the slow peer and returns an error to direct callers.

@@ -2,6 +2,8 @@ package p2p
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -26,12 +28,12 @@ func TestEngineNetworkAndRelayedAdmissionBoundary(t *testing.T) {
 	}
 	target.cfg.NetworkID = sender.cfg.NetworkID
 	target.cfg.Restricted = true
-	target.approved[relay.id] = true
+	target.approved[relay.id] = hex.EncodeToString(target.id.SignPub)
 	target.handleEnvelope(relay, env)
 	if len(target.incoming) != 0 {
 		t.Fatal("unapproved origin bypassed restricted admission through relay")
 	}
-	target.approved[sender.ID()] = true
+	target.approved[sender.ID()] = hex.EncodeToString(sender.id.SignPub)
 	target.handleEnvelope(relay, env)
 	if len(target.incoming) != 1 {
 		t.Fatal("approved relayed origin rejected")
@@ -85,4 +87,40 @@ func TestEngineDHTContextCancelsPendingRPC(t *testing.T) {
 	}
 	// This synthetic peer has no socket; remove before node cleanup.
 	delete(n.peers, remote.ID())
+}
+
+func TestRelayedTransportClaimCannotBypassSigningApproval(t *testing.T) {
+	victim, attacker, target := securityNode(t), securityNode(t), securityNode(t)
+	attacker.cfg.NetworkID = target.ID()
+	target.cfg.NetworkID = target.ID()
+	target.cfg.Restricted = true
+	target.approved[victim.ID()] = hex.EncodeToString(victim.id.SignPub)
+	env, err := attacker.signGossip(wire.Envelope{Type: wire.MsgGossip, Payload: wire.MustMarshal(wire.Gossip{ID: "forged-transport", Channel: "engine/test", Body: json.RawMessage(`{}`)})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Any signing key can sign a public Noise key. This is a valid Ed25519
+	// signature, but no evidence that the signer owns the victim's Noise key.
+	env.FromID = victim.ID()
+	env.OriginBinding = ed25519.Sign(attacker.id.SignPriv, identityBinding(victim.id.NoisePub[:]))
+	b, err := gossipSigningBytes(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.Signature = ed25519.Sign(attacker.id.SignPriv, b)
+	if !verifyGossip(env, time.Now()) {
+		t.Fatal("adversarial signature fixture is invalid")
+	}
+	relay := &peer{id: attacker.ID()}
+	target.handleEnvelope(relay, env)
+	if len(target.incoming) != 0 {
+		t.Fatal("transport-only claim bypassed pinned signing approval")
+	}
+	target.cfg.Restricted = false
+	target.peers[victim.ID()] = &peer{userID: hex.EncodeToString(victim.id.SignPub)}
+	target.handleEnvelope(relay, env)
+	delete(target.peers, victim.ID())
+	if len(target.incoming) != 0 {
+		t.Fatal("relay replaced a known authenticated signing binding")
+	}
 }

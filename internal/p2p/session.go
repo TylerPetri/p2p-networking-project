@@ -127,7 +127,7 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool, expected ...string
 	if hello.NetworkID != n.cfg.NetworkID {
 		return nil, secure, fmt.Errorf("network mismatch")
 	}
-	if !n.admitted(env.FromID) {
+	if !n.admitted(env.FromID, remoteUserID) {
 		return nil, secure, ErrAdmissionDenied
 	}
 	if n.cfg.NetworkID != "" {

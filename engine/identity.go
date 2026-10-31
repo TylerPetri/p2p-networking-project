@@ -31,6 +31,10 @@ func (i *Identity) PeerID() string {
 	}
 	return i.id.ID
 }
+
+// SigningID is the hex Ed25519 public key, distinct from the Noise PeerID.
+func (i *Identity) SigningID() string { return hex.EncodeToString(i.SigningPublicKey()) }
+
 func (i *Identity) SigningPublicKey() []byte {
 	if i == nil || i.id == nil {
 		return nil

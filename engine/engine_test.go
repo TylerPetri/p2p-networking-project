@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"net"
 	"os"
@@ -134,7 +135,7 @@ func TestDirectPublishAndApplicationIsolation(t *testing.T) {
 	}
 	payload[0] = 'X'
 	m := receive(t, b)
-	if string(m.Data) != "direct" || m.FromPeer != a.PeerID() || len(m.SigningKey) != 32 {
+	if hex.EncodeToString(m.SigningKey) != a.SigningID() || string(m.Data) != "direct" || m.ClaimedPeerID != a.PeerID() || len(m.SigningKey) != 32 {
 		t.Fatal("bad origin or copy", m)
 	}
 	select {
@@ -145,7 +146,7 @@ func TestDirectPublishAndApplicationIsolation(t *testing.T) {
 	if err := b.Publish(context.Background(), "broadcast", []byte("gossip")); err != nil {
 		t.Fatal(err)
 	}
-	if m := receive(t, c); m.FromPeer != b.PeerID() || string(m.Data) != "gossip" {
+	if m := receive(t, c); hex.EncodeToString(m.SigningKey) != b.SigningID() || m.ClaimedPeerID != b.PeerID() || string(m.Data) != "gossip" {
 		t.Fatal(m)
 	}
 	other := node(t, id, "beta", nil)
@@ -182,8 +183,18 @@ func TestDomainsMembershipAndFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restricted := node(t, id, "test", func(c *engine.Config) { c.Admission = engine.Restricted; c.ApprovedPeers = []string{identity.PeerID()} })
+	restricted := node(t, id, "test", func(c *engine.Config) {
+		c.Admission = engine.Restricted
+		c.ApprovedPeers = map[string]string{identity.PeerID(): identity.SigningID()}
+	})
 	approved := node(t, id, "test", func(c *engine.Config) { c.Identity = identity })
+	wrongSigningPin := node(t, id, "test", func(c *engine.Config) {
+		c.Admission = engine.Restricted
+		c.ApprovedPeers = map[string]string{identity.PeerID(): a.SigningID()}
+	})
+	if err := approved.Connect(ctx, wrongSigningPin.Address()); err == nil {
+		t.Fatal("wrong signing-key approval accepted")
+	}
 	connect(t, approved, restricted)
 	if err := approved.Send(ctx, restricted.PeerID(), "allowed", []byte("member")); err != nil {
 		t.Fatal(err)
@@ -384,7 +395,7 @@ func TestIdentitySurvivesEngineRecreation(t *testing.T) {
 		if err := local.Send(context.Background(), remote.PeerID(), "reconnected", []byte("ok")); err != nil {
 			t.Fatal(err)
 		}
-		if m := receive(t, remote); m.FromPeer != identity.PeerID() {
+		if m := receive(t, remote); m.ClaimedPeerID != identity.PeerID() {
 			t.Fatal("wrong identity")
 		}
 		if err := local.Close(); err != nil {

@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"p2p-park/internal/netx"
 	proto "p2p-park/internal/wire"
@@ -36,7 +37,19 @@ func (n *Node) handleEnvelope(p *peer, env proto.Envelope) {
 			n.queueReferral(netx.Addr(pi.Addr), pi.ID)
 		}
 	case proto.MsgGossip:
-		if env.NetworkID != n.cfg.NetworkID || !n.admitted(env.FromID) || !verifyGossip(env, time.Now()) {
+		if env.NetworkID != n.cfg.NetworkID || !verifyGossip(env, time.Now()) {
+			return
+		}
+		if !n.admitted(env.FromID, hex.EncodeToString(env.OriginPub)) {
+			return
+		}
+		// A relay cannot replace a currently authenticated peer's signing key.
+		// Unknown open-network transport-ID claims still require out-of-band trust.
+		n.mu.RLock()
+		known := n.peers[env.FromID]
+		mismatch := known != nil && known.userID != "" && known.userID != hex.EncodeToString(env.OriginPub)
+		n.mu.RUnlock()
+		if mismatch {
 			return
 		}
 		if env.Recipient != "" && env.Recipient != n.ID() {

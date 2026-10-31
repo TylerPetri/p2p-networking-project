@@ -57,17 +57,18 @@ type Config struct {
 	PeerPins       map[string]string
 	DiscoveryCIDRs []string
 	Admission      Admission
-	ApprovedPeers  []string
+	ApprovedPeers  map[string]string
 	MaxConnections int
 	MessageTimeout time.Duration
 	PeerStorePath  string
 }
 
-// Message has verified origin identity, not verified application authority.
+// Message authenticates SigningKey, not application authority. ClaimedPeerID is
+// a signed transport-ID claim; restricted approvals pin its signing-key pair.
 // Data and SigningKey are owned by the receiver and may be modified by it.
 type Message struct {
-	ID, FromPeer, Topic string
-	SigningKey, Data    []byte
+	ID, ClaimedPeerID, Topic string
+	SigningKey, Data         []byte
 }
 type Peer struct{ ID, Name, Address, SigningID string }
 type Event struct {
@@ -229,6 +230,9 @@ func (e *Engine) running() error {
 	return nil
 }
 func (e *Engine) PeerID() string { return e.node.ID() }
+
+// SigningID is the hex Ed25519 public key, used with PeerID in approval pins.
+func (e *Engine) SigningID() string { return hex.EncodeToString(e.node.Identity().SignPub) }
 func (e *Engine) Address() string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -324,7 +328,7 @@ func (e *Engine) pump() {
 			if json.Unmarshal(g.Body, &m) != nil || len(m.Topic) == 0 || len(m.Topic) > 64 || len(m.Data) > MaxMessageSize {
 				continue
 			}
-			msg := Message{ID: g.ID, FromPeer: env.FromID, Topic: m.Topic, SigningKey: append([]byte(nil), env.OriginPub...), Data: m.Data}
+			msg := Message{ID: g.ID, ClaimedPeerID: env.FromID, Topic: m.Topic, SigningKey: append([]byte(nil), env.OriginPub...), Data: m.Data}
 			select {
 			case e.messages <- msg:
 			default:

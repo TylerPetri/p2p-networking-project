@@ -63,12 +63,14 @@ DHT discovery, not an implicit LAN broadcast worker.
 ## Identity, domain and policy
 
 - **Transport peer identity:** stable Noise/X25519 static public key, hex PeerID.
-- **Signing identity:** separate Ed25519 key, cryptographically bound to that static
-  key; signed message origin carries its public key. Neither key is a human name.
+- **Signing identity:** separate Ed25519 key. Noise XX proves the direct transport
+  key and carries a signature binding the signing key to it. Relayed gossip proves
+  signing-key possession, but its signed Noise-ID claim alone is not transferable
+  proof of Noise-private-key possession. Neither key is a human name.
 - **Network identity:** a public random 32-byte overlay ID, distinct from peer IDs
   and application names. Sharing it is not proof of membership or a secret.
 - **Membership/admission:** OPEN accepts any correctly bound identity within budgets;
-  RESTRICTED is a static approved-transport-ID set. Both Hello admission and relayed
+  RESTRICTED is a static map of approved Noise IDs to Ed25519 signing IDs. Both Hello admission and relayed
   signed origins enforce the local policy. No dynamic approval service, roles,
   revocation protocol, enterprise directory or application authorization is implied.
 - **Application authorization:** the application's decision whether a verified
@@ -86,6 +88,23 @@ preserves old signed bytes. Engine/Park protocol versions intentionally do not
 interoperate directly. There is no negotiation, bridge or rolling-upgrade promise.
 Run the same revision on peers. Names/topics do not establish membership, and a
 restricted node must approve every gossip origin it wants to receive via relays.
+
+## Relayed identity decision
+
+Final adversarial review found that pinning only a Noise ID for restricted gossip
+would permit a signer to sign that public Noise key with its own Ed25519 key and
+claim the approved transport ID. The signature remains mathematically valid.
+Options were to require a direct session with every origin, introduce a separate
+certificate protocol, or explicitly approve both existing public keys. The last
+option is smallest and preserves relay operation: restricted configuration pins
+Noise ID **and** SigningID, checked at handshake and on relayed origins. No custom
+proof or cryptographic conversion was invented. Contradictions of a currently
+connected peer's signing binding are also rejected, including for the legacy core.
+
+For unknown open-network relayed origins the API exposes `ClaimedPeerID` honestly;
+`SigningKey` is the authenticated origin to use for application trust. A consumer
+must not grant authority solely from an unverified Noise-ID claim. Tests reproduce
+the validly signed impersonation attempt and verify restricted/known-peer denial.
 
 ## Extraction path and Phase 2
 

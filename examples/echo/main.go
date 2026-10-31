@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -60,10 +61,10 @@ func run() error {
 	}
 	select {
 	case msg := <-nodes[2].Messages():
-		if msg.FromPeer != nodes[1].PeerID() || msg.Topic != "greeting" {
+		if hex.EncodeToString(msg.SigningKey) != nodes[1].SigningID() || msg.ClaimedPeerID != nodes[1].PeerID() || msg.Topic != "greeting" || string(msg.Data) != "hello from an application-independent engine" {
 			return fmt.Errorf("unexpected authenticated message")
 		}
-		fmt.Printf("PASS: three engine nodes; verified origin %s; payload: %s\n", msg.FromPeer, string(msg.Data))
+		fmt.Printf("PASS: three engine nodes; verified origin %s; payload: %s\n", hex.EncodeToString(msg.SigningKey), string(msg.Data))
 	case <-ctx.Done():
 		return ctx.Err()
 	}

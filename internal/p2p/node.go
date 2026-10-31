@@ -20,7 +20,7 @@ type NodeConfig struct {
 	Identity         *Identity
 	NetworkID        string
 	Restricted       bool
-	ApprovedPeers    []string
+	ApprovedPeers    map[string]string
 	DisablePeerStore bool
 	PeerStorePath    string
 	MaxConnections   int
@@ -71,7 +71,7 @@ type PeerSnapshot struct {
 }
 
 type Node struct {
-	approved          map[string]bool
+	approved          map[string]string
 	lifeMu            sync.Mutex
 	sessions          sync.WaitGroup
 	workers           sync.WaitGroup
@@ -140,12 +140,12 @@ func NewNode(cfg NodeConfig) (*Node, error) {
 	if cfg.NetworkID != "" && !validPeerID(cfg.NetworkID) {
 		return nil, fmt.Errorf("invalid network ID")
 	}
-	approved := make(map[string]bool)
-	for _, pid := range cfg.ApprovedPeers {
-		if !validPeerID(pid) {
+	approved := make(map[string]string)
+	for pid, signer := range cfg.ApprovedPeers {
+		if !validPeerID(pid) || !validPeerID(signer) {
 			return nil, fmt.Errorf("invalid approved peer ID")
 		}
-		approved[pid] = true
+		approved[pid] = signer
 	}
 	var opts []dht.Option
 	if !cfg.DisablePeerStore {

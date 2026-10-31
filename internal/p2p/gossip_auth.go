@@ -14,8 +14,9 @@ const gossipLifetime = 5 * time.Minute
 const gossipFutureSkew = 30 * time.Second
 
 // Standard Ed25519 signs a domain-separated, fixed-field JSON representation.
-// The identity binding is also verified so a relayer cannot choose another
-// network ID for its own signing key. Names are never trust anchors.
+// The signed binding does not alone prove possession of the claimed Noise key;
+// direct sessions and restricted paired-key pins supply that trust separately.
+// Names and unverified relayed transport-ID claims are never trust anchors.
 func gossipSigningBytes(env proto.Envelope) ([]byte, error) {
 	env.Signature = nil
 	b, err := json.Marshal(env)

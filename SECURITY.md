@@ -26,10 +26,15 @@ Local host compromise and malicious local API callers are outside these controls
   automatically promoted to trusted human identities. Park inbound admission remains
   open to arbitrary keys within the connection budget. The new engine facade
   can additionally restrict sessions and relayed gossip origins to a static
-  approved-peer list.
+  map of approved Noise and Ed25519 key pairs.
 - Gossip carries an Ed25519 origin signature over a domain-separated fixed-field
   JSON envelope, signing-key/static-key binding and timestamp. Relays preserve the
-  signature. Direct control-message origins come from the authenticated session.
+  signature. A relayed origin's signature proves its Ed25519 key possession;
+  signing a public Noise key does not independently prove possession of that
+  Noise private key. Contradictions of currently connected peer bindings are
+  rejected, but unknown open-network transport-ID claims require separate trust.
+  Applications must authorize by trusted signing keys, not claimed Noise IDs.
+  Direct control-message origins come from the authenticated session.
   NAT relay routing metadata remains the seed's claim; opaque payloads need their
   own authentication before any future authorization use.
 - Shared channels use XChaCha20-Poly1305 with random 24-byte nonces and the channel
@@ -99,9 +104,11 @@ Mismatched versions/domains fail before peer admission; no bridge or negotiation
 is supplied. Same-revision nodes are required.
 
 Open admission is still open to Sybil identities. Restricted admission checks a
-static local allowlist, including relayed gossip origins, but does not provide
+static local map pinning both Noise and Ed25519 identities, including relayed
+gossip origins, but does not provide
 revocation distribution, key rotation, human identity or business authorization.
-Use separately obtained pins/approvals. A network ID is not a secret. Application
+Use separately obtained pins/paired-key approvals. The engine exposes
+`Message.ClaimedPeerID` separately from its authenticated `SigningKey`. A network ID is not a secret. Application
 labels filter public API delivery; relays can read gossip and applications still
 must validate content/authority. Admission does not certify DHT record authors.
 DHT freshness/type/namespace limitations and volatile replay state remain.
