@@ -131,9 +131,11 @@ caller cancellation and then its deferred AfterFunc stop could suppress the
 scheduled socket close before it ran. The stalled handshake retained its budget
 until the five-second setup watchdog instead of releasing promptly. The cancelled
 return path now explicitly closes the raw connection before returning; session
-cleanup still releases the existing shared budget. No timeout/budget was relaxed.
+cleanup still releases the existing shared budget. Cancellation is also
+normalized to its context error if setup reports EOF concurrently. No timeout/budget was relaxed.
 The existing stalled-connect regression is repeated 100 times locally with
-GOMAXPROCS=1 and the race detector, plus 50 times in CI;
+GOMAXPROCS=1 and again with GOMAXPROCS=2 under the race detector, plus
+50 times in CI;
 this is a resource-cleanup fix, not a protocol or cryptographic redesign.
 
 ## Verification and limitations
