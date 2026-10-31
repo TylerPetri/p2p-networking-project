@@ -152,7 +152,11 @@ func (i Invitation) canonical(now time.Time) ([]byte, Invitation, error) {
 // Encode returns p2p://invite/<unpadded-base64url-canonical-JSON>.
 // It performs no I/O. Unknown extensions require a new invitation version.
 func (i Invitation) Encode() (string, error) {
-	b, _, err := i.canonical(time.Now())
+	return i.encodeAt(time.Now())
+}
+
+func (i Invitation) encodeAt(now time.Time) (string, error) {
+	b, _, err := i.canonical(now)
 	if err != nil {
 		return "", err
 	}
@@ -167,6 +171,10 @@ func (i Invitation) Encode() (string, error) {
 // duplicate/unknown fields, alternate encodings, trailing values and URL wrappers
 // are rejected. Size is bounded before decoding; parsing performs no network I/O.
 func ParseInvitation(uri string) (Invitation, error) {
+	return parseInvitationAt(uri, time.Now())
+}
+
+func parseInvitationAt(uri string, now time.Time) (Invitation, error) {
 	if len(uri) > MaxInvitationSize || !strings.HasPrefix(uri, invitationPrefix) {
 		return Invitation{}, invitationError("invalid URI or size")
 	}
@@ -181,7 +189,7 @@ func ParseInvitation(uri string) (Invitation, error) {
 	if decoder.Decode(&i) != nil {
 		return Invitation{}, invitationError("invalid JSON fields")
 	}
-	canonical, owned, err := i.canonical(time.Now())
+	canonical, owned, err := i.canonical(now)
 	if err != nil {
 		return Invitation{}, err
 	}
