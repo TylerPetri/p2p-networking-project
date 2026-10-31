@@ -58,7 +58,7 @@ bootstrap service. Ports must be 1–65535. IPv6 must use canonical compressed
 lowercase spelling. DNS names, IPv6 zones, IPv4-mapped IPv6, URI/userinfo/path forms,
 leading-zero ports and wildcard listeners are rejected.
 
-Parsing always rejects unspecified, multicast, broadcast, link-local, reserved,
+Parsing always rejects unspecified, multicast, limited-broadcast, link-local, reserved,
 documentation, benchmark and supported special-use exclusions. IPv4 exclusions:
 `0/8`, `169.254/16`, `192.0.0/24`, `192.0.2/24`, `192.88.99/24`, `198.18/15`,
 `198.51.100/24`, `203.0.113/24`, `224/4`, `240/4`, plus known platform endpoints
@@ -74,7 +74,7 @@ CGNAT (`100.64/10`) addresses additionally require explicit receiving-operator
 cannot provide this policy or enable a prohibited address. Even a loopback-bound
 engine requires explicit approval of local invitation destinations. Avoid broad
 ranges: approval allows attempts against selected ports inside that range. IP
-policy is not a firewall or protection against arbitrary routing/NAT configured
+policy cannot infer every directed subnet broadcast or rewritten route and is not a firewall or protection against arbitrary routing/NAT configured
 outside the process. Public endpoints also allow bounded port probes.
 
 All invitation fields, network match, scope options and configured pin conflicts

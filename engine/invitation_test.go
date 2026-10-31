@@ -106,6 +106,9 @@ func TestInvitationCanonicalParsingAndPolicy(t *testing.T) {
 			t.Fatal("noncanonical bootstrap order accepted")
 		}
 	}
+	if _, err := a.Invitation(nil, time.Unix(0, 0)); !errors.Is(err, engine.ErrInvitationExpired) {
+		t.Fatal("explicit Unix epoch expiry became no expiry", err)
+	}
 	i.Version = 2
 	if _, err := i.Encode(); !errors.Is(err, engine.ErrUnsupportedInvitationVersion) {
 		t.Fatal(err)

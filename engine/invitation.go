@@ -206,6 +206,9 @@ func (e *Engine) Invitation(addresses []string, expires time.Time) (Invitation, 
 	}
 	i := Invitation{Version: InvitationVersion, NetworkID: e.networkID}
 	if !expires.IsZero() {
+		if expires.Unix() <= time.Now().Unix() {
+			return Invitation{}, ErrInvitationExpired
+		}
 		i.ExpiresUnix = expires.Unix()
 	}
 	for _, addr := range addresses {
