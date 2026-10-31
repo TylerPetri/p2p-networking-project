@@ -28,8 +28,13 @@ func NewManager(store *PeerStore, lanCfg LANConfig) *Manager {
 }
 
 // Run starts the periodic discovery loop.
-func (m *Manager) Run(n *p2p.Node) {
+func (m *Manager) Run(n *p2p.Node) { _ = m.RunManaged(n) }
+
+// RunManaged returns completion for owners that must join discovery on shutdown.
+func (m *Manager) RunManaged(n *p2p.Node) <-chan struct{} {
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		select {
 		case <-n.Done():
 			return
@@ -51,7 +56,9 @@ func (m *Manager) Run(n *p2p.Node) {
 				fmt.Printf("[DISCOVERY] found %d peers: %v\n", len(addrs), addrs)
 			}
 			// 2) PeerStore
-			addrs = append(addrs, m.Store.Candidates(m.MaxFailures)...)
+			if m.Store != nil {
+				addrs = append(addrs, m.Store.Candidates(m.MaxFailures)...)
+			}
 			// 3) Seeds
 			addrs = append(addrs, m.Seeds...)
 
@@ -78,10 +85,14 @@ func (m *Manager) Run(n *p2p.Node) {
 						if n.Debug() {
 							fmt.Printf("[DISCOVERY] connect to %s failed: %v\n", addr, err)
 						}
-						m.Store.NoteFailure(addr)
+						if m.Store != nil {
+							m.Store.NoteFailure(addr)
+						}
 						return
 					}
-					m.Store.NoteSuccess(addr)
+					if m.Store != nil {
+						m.Store.NoteSuccess(addr)
+					}
 				}(a)
 			}
 
@@ -92,4 +103,5 @@ func (m *Manager) Run(n *p2p.Node) {
 			}
 		}
 	}()
+	return done
 }

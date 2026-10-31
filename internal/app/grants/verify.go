@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/gameproto"
 )
 
 var (

@@ -41,6 +41,20 @@ type lanMessage struct {
 // StartLANResponder listens for LAN discovery pings and replies with a pong
 // containing this node's listen address. It runs until the provided channel is closed.
 func StartLANResponder(stop <-chan struct{}, cfg LANConfig, listenAddr, name string) error {
+	_, err := StartLANResponderManaged(stop, cfg, listenAddr, name)
+	return err
+}
+
+// StartLANResponderManaged reports completion so owners can join the UDP worker.
+func StartLANResponderManaged(stop <-chan struct{}, cfg LANConfig, listenAddr, name string) (<-chan struct{}, error) {
+	done := make(chan struct{})
+	err := startLANResponder(stop, cfg, listenAddr, name, done)
+	if err != nil {
+		close(done)
+	}
+	return done, err
+}
+func startLANResponder(stop <-chan struct{}, cfg LANConfig, listenAddr, name string, done chan struct{}) error {
 	lc := net.ListenConfig{
 		Control: func(network, address string, c syscall.RawConn) error {
 			var ctrlErr error
@@ -68,6 +82,7 @@ func StartLANResponder(stop <-chan struct{}, cfg LANConfig, listenAddr, name str
 	}
 
 	go func() {
+		defer close(done)
 		defer udpConn.Close()
 
 		buf := make([]byte, 1024)

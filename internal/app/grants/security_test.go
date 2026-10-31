@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/gameproto"
 )
 
 func TestGrantCanonicalIDsAndCreatorScopedReplay(t *testing.T) {

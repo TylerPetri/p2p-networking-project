@@ -1,15 +1,21 @@
 package parknode
 
-import "p2p-park/internal/netx"
+import "p2p-park/engine"
 
 type Config struct {
-	PeerPins       map[netx.Addr]string
-	DiscoveryCIDRs []string
-	DisableLAN     bool
-	DataDir        string
-	Name           string
-	Bind           string
-	IsSeed         bool
-	Bootstraps     []netx.Addr
-	Debug          bool
+	NetworkID     string
+	Identity      *engine.Identity
+	Admission     engine.Admission
+	ApprovedPeers map[string]string
+
+	PeerPins          map[string]string
+	DiscoveryCIDRs    []string
+	DisableLAN        bool
+	DataDir           string
+	DiscoveryStateDir string
+	Name              string
+	Bind              string
+	IsSeed            bool
+	Bootstraps        []string
+	Debug             bool
 }

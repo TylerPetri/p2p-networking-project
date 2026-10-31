@@ -1,6 +1,6 @@
 package grants
 
-import "p2p-park/internal/proto"
+import proto "p2p-park/internal/gameproto"
 
 // Store persists quiz grants and supports efficient "since timestamp" range queries.
 type Store interface {

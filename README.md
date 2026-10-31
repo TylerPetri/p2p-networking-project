@@ -16,16 +16,18 @@ system, and its protocol has not been independently verified or audited. See
 for the threat model and [Pass 2 review](docs/PASS2_REVIEW.md) for baseline findings,
 test evidence and resource budgets. The [final review](docs/FINAL_REVIEW.md) records
 the prior portfolio merge assessment, compatibility and remaining limitations.
-The [engine extraction review](docs/ENGINE_REVIEW.md) records this phase.
+The [Phase 1 review](docs/ENGINE_REVIEW.md) records the extraction; the
+[Phase 2 adapter review](docs/PHASE2_ENGINE_ADAPTER.md) describes Park as a consumer.
 
-## Application-independent engine (Phase 1)
+## Application-independent engine and Park consumer
 
 The public [`engine`](engine/README.md) package lets a Go application create or
 join an overlay, persist an identity, bootstrap/discover peers, send authenticated
 messages, use validated DHT records and observe peer events. It builds on the
 existing networking implementation. P2P-Park remains the working game/CLI; no
-new game features are part of this extraction. The game still uses the shared
-internal core through its legacy adapter; migrating it to the facade is Phase 2.
+new game features are part of this extraction. Park now consumes the public engine through a focused application adapter.
+Game schemas, signing, permissions, encrypted channels and grant persistence stay
+on the application side; networking admission and resource limits stay in the engine.
 
 ```sh
 go run ./examples/echo
@@ -39,8 +41,8 @@ boundary map, admission choices and future extraction path, see the
 [architecture assessment](docs/ENGINE_ARCHITECTURE.md).
 
 Engine peers use `p2p-engine/0.1.0`, a public network identifier and either open
-admission or static approved-peer admission. Engine and Park `0.2.0` peers reject
-one another safely; neither negotiates versions. Membership is separate from
+admission or static approved-peer admission. Current Park uses application namespace `p2p-park.0.3.0` on that engine. Legacy
+Park `0.2.0` peers are incompatible; there is no version negotiation. Membership is separate from
 application authorization. The engine API exposes verified messages, not raw
 control envelopes or private signing keys. This remains experimental networking,
 not a production security or enterprise authorization platform.
@@ -52,7 +54,9 @@ flowchart LR
     Example[examples/echo or future application] --> Engine[Public engine API]
     Engine --> P2P
     CLI[park-node CLI] --> Apps[Chat / points / quizzes / grants]
-    Apps --> P2P[Peer lifecycle / gossip / relay]
+    Apps --> Adapter[Park application adapter]
+    Adapter --> Engine
+    Engine --> P2P[Peer lifecycle / gossip / relay]
     Discovery[Bootstrap / peer lists / optional UDP LAN discovery] --> P2P
     P2P <--> DHT[Kademlia-style routing / RPC / records]
     P2P --> Noise[Noise XX / bounded encrypted frames]
@@ -68,7 +72,7 @@ flowchart LR
 - Each connection verifies its peer ID against the Noise static key. An Ed25519
   signature binds the separate signing key to that static key. This proves key
   possession, not a person's identity or trustworthiness. Keys are generated
-  on each game-node start. The engine optionally loads persistent identities;
+  on each game-node start by default. Park can accept an explicit persistent engine identity;
   neither interface provides a trusted-key directory.
   Optional outbound `-pins address=Noise-ID` checks an expected key supplied by
   the operator; it does not silently trust a key on first use.
@@ -171,7 +175,7 @@ outside this demo and advertises/responds on UDP port 42042.
 go vet ./...
 go test -count=1 ./...
 go test -race -count=1 ./...
-go test -race -count=10 ./engine
+go test -race -count=10 ./engine ./internal/park-node
 python3 scripts/check_engine_boundary.py
 go test -race -count=20 ./internal/crypto/noiseconn ./internal/dht ./internal/crypto/channel
 go test -race -count=10 -run 'TestSession|TestIdentify|TestStop|TestGossip|TestNAT|TestEncrypted|TestDHT' ./internal/p2p
@@ -190,13 +194,14 @@ schedules, not proof of concurrency safety. The review adds tests for malicious
 framing, partial I/O, buffered reads, ciphertext replay/tampering, identity claims,
 RPC response sources, record validation and cancellation.
 
-The application protocol is `park-p2p/0.2.0`: mutual identity bindings, signed
+The current core protocol is `p2p-engine/0.1.0`, with Park application namespace
+`p2p-park.0.3.0`: mutual identity bindings, signed
 gossip and channel-name associated data are required. Older revisions are
 incompatible; all demo nodes must use the same revision. There is no version
 negotiation or rolling-upgrade guarantee. Empty, older and unknown Hello protocol
 versions are rejected before peer admission. The internal transport abstraction
-allows explicit test protocols; the shipped application uses one shared version
-constant. Existing TCP, Noise XX, gossip, DHT and relay architecture is retained.
+allows explicit test protocols; the shipped application uses the engine
+version and a versioned message namespace. Existing TCP, Noise XX, gossip, DHT and relay architecture is retained.
 
 ## Security boundaries and resource budgets
 
