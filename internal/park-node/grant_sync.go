@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"time"
 
+	"p2p-park/engine"
 	"p2p-park/internal/app/grants"
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/gameproto"
 )
 
 const (
@@ -35,19 +36,15 @@ func (a *App) initiateGrantSync(peerID string) {
 	}
 
 	body, _ := json.Marshal(sum)
-	_ = a.Node.SendToPeer(peerID, proto.Envelope{
-		Type:    proto.MsgGrantSyncSummary,
-		FromID:  a.Node.ID(),
-		Payload: body,
-	})
+	_ = a.net.send(peerID, "grants.summary", body)
 }
 
-func (a *App) handleGrantSyncSummary(env proto.Envelope) {
+func (a *App) handleGrantSyncSummary(m engine.Message) {
 	if a.GrantStore == nil {
 		return
 	}
 	var sum proto.GrantSyncSummary
-	if err := json.Unmarshal(env.Payload, &sum); err != nil {
+	if err := json.Unmarshal(m.Data, &sum); err != nil {
 		return
 	}
 
@@ -64,21 +61,17 @@ func (a *App) handleGrantSyncSummary(env proto.Envelope) {
 		}
 		req := proto.GrantSyncRequest{SinceTimestamp: since, Limit: grantSyncLimit}
 		body, _ := json.Marshal(req)
-		_ = a.Node.SendToPeer(env.FromID, proto.Envelope{
-			Type:    proto.MsgGrantSyncRequest,
-			FromID:  a.Node.ID(),
-			Payload: body,
-		})
+		_ = a.net.reply(m, "grants.request", body)
 	}
 
 }
 
-func (a *App) handleGrantSyncRequest(env proto.Envelope) {
+func (a *App) handleGrantSyncRequest(m engine.Message) {
 	if a.GrantStore == nil {
 		return
 	}
 	var req proto.GrantSyncRequest
-	if err := json.Unmarshal(env.Payload, &req); err != nil {
+	if err := json.Unmarshal(m.Data, &req); err != nil {
 		return
 	}
 	if req.Limit <= 0 || req.Limit > grantSyncLimit {
@@ -90,19 +83,15 @@ func (a *App) handleGrantSyncRequest(env proto.Envelope) {
 	}
 	resp := proto.GrantSyncResponse{Grants: grs}
 	body, _ := json.Marshal(resp)
-	_ = a.Node.SendToPeer(env.FromID, proto.Envelope{
-		Type:    proto.MsgGrantSyncResponse,
-		FromID:  a.Node.ID(),
-		Payload: body,
-	})
+	_ = a.net.reply(m, "grants.response", body)
 }
 
-func (a *App) handleGrantSyncResponse(env proto.Envelope) {
+func (a *App) handleGrantSyncResponse(m engine.Message) {
 	if a.GrantStore == nil {
 		return
 	}
 	var resp proto.GrantSyncResponse
-	if err := json.Unmarshal(env.Payload, &resp); err != nil {
+	if err := json.Unmarshal(m.Data, &resp); err != nil {
 		return
 	}
 

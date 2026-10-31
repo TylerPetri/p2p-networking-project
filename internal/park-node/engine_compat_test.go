@@ -10,7 +10,7 @@ import (
 	"p2p-park/engine"
 )
 
-func TestEngineAndParkFailClosedAcrossProtocols(t *testing.T) {
+func TestEngineAndParkFailClosedAcrossNetworks(t *testing.T) {
 	t.Setenv("P2P_PARK_DATA_DIR", t.TempDir())
 	app, err := New(Config{Name: "park", Bind: "127.0.0.1:0", DataDir: t.TempDir(), DisableLAN: true}, log.New(io.Discard, "", 0))
 	if err != nil {
@@ -31,10 +31,10 @@ func TestEngineAndParkFailClosedAcrossProtocols(t *testing.T) {
 	if err := n.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := n.Connect(ctx, string(app.Node.ListenAddr())); err == nil {
+	if err := n.Connect(ctx, app.Network.Address()); err == nil {
 		t.Fatal("incompatible engine/Park protocols connected")
 	}
-	if len(n.Peers()) != 0 || app.Node.PeerCount() != 0 {
+	if len(n.Peers()) != 0 || len(app.Network.Peers()) != 0 {
 		t.Fatal("incompatible peer admitted")
 	}
 }

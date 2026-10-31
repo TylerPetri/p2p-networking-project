@@ -9,11 +9,11 @@ import (
 	"strings"
 	"syscall"
 
-	"p2p-park/internal/netx"
 	parknode "p2p-park/internal/park-node"
 )
 
 func main() {
+	networkID := flag.String("network", parknode.DefaultNetworkID, "public overlay ID (64 lowercase hex); not an admission secret")
 	pinStr := flag.String("pins", "", "comma-separated address=Noise-ID pins for outbound connections")
 	discoveryStr := flag.String("discover-cidrs", "", "comma-separated numeric IP ranges approved for automatic discovery")
 	lan := flag.Bool("lan", true, "enable LAN discovery/responder (disable for isolated localhost demo)")
@@ -25,14 +25,14 @@ func main() {
 	dataDir := flag.String("data", "", "data directory for persistent state (default: user config dir)")
 	flag.Parse()
 
-	pins := make(map[netx.Addr]string)
+	pins := make(map[string]string)
 	if *pinStr != "" {
 		for _, entry := range strings.Split(*pinStr, ",") {
 			parts := strings.SplitN(entry, "=", 2)
 			if len(parts) != 2 {
 				log.Fatal("invalid -pins entry; expected address=Noise-ID")
 			}
-			pins[netx.Addr(strings.TrimSpace(parts[0]))] = strings.TrimSpace(parts[1])
+			pins[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
 		}
 	}
 	var discoveryCIDRs []string
@@ -41,12 +41,12 @@ func main() {
 			discoveryCIDRs = append(discoveryCIDRs, strings.TrimSpace(s))
 		}
 	}
-	var bootstraps []netx.Addr
+	var bootstraps []string
 	if *bootstrapStr != "" {
 		for _, part := range strings.Split(*bootstrapStr, ",") {
 			part = strings.TrimSpace(part)
 			if part != "" {
-				bootstraps = append(bootstraps, netx.Addr(part))
+				bootstraps = append(bootstraps, part)
 			}
 		}
 	}
@@ -54,6 +54,7 @@ func main() {
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 
 	app, err := parknode.New(parknode.Config{
+		NetworkID:      *networkID,
 		DataDir:        *dataDir,
 		DisableLAN:     !*lan,
 		PeerPins:       pins,

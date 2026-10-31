@@ -1,7 +1,7 @@
 package parknode
 
 import (
-	"p2p-park/internal/p2p"
+	"p2p-park/engine"
 	"p2p-park/internal/uiutil"
 )
 
@@ -13,12 +13,12 @@ const (
 	ansiReset = uiutil.AnsiReset
 )
 
-func PrintBanner(p Printer, n *p2p.Node) {
+func PrintBanner(p Printer, n *engine.Engine, name string) {
 	p.Println()
 	p.Println("Node started.")
-	p.Printf("Name:           %s\n", n.Name())
-	p.Printf("ID:             %s\n", shortID(n.ID()))
-	p.Printf("Addr:           %s\n", n.ListenAddr())
+	p.Printf("Name:           %s\n", name)
+	p.Printf("ID:             %s\n", shortID(n.PeerID()))
+	p.Printf("Addr:           %s\n", n.Address())
 	p.Println()
 	PrintCommands(p)
 	p.Println()

@@ -1,5 +1,9 @@
 # Phase 1: networking engine extraction
 
+Historical Phase 1 record. See [Phase 2 migration](PHASE2_ENGINE_ADAPTER.md) for
+the current Park consumer boundary and API additions.
+
+
 Baseline: merged main `b6cfb37` (PR #1). All security, final-review, protocol,
 license and dependency documents remain applicable; this is still experimental.
 No game features or new cryptographic primitives are part of this extraction.
