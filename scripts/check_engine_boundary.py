@@ -2,7 +2,7 @@
 """Check the production dependency closure of the public engine and example."""
 import subprocess
 
-for package in ("./engine", "./examples/echo"):
+for package in ("./engine", "./examples/echo", "./examples/netcheck"):
     deps = subprocess.check_output(["go", "list", "-deps", package], text=True).splitlines()
     forbidden = ("p2p-park/internal/app/", "p2p-park/internal/storage/",
                  "p2p-park/internal/park-node", "p2p-park/internal/proto",

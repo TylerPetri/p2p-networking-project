@@ -2,8 +2,8 @@
 
 Import `p2p-park/engine` from the existing Go module. Start with
 [`examples/echo`](../examples/echo/main.go): `go run ./examples/echo` creates three
-loopback nodes, persists disposable identities, connects them and verifies a
-signed message exchanged between peers. It closes all nodes and removes its
+loopback nodes, persists disposable identities, joins through public invitations, verifies peer discovery, and exchanges
+authenticated messages after bootstrap loss and fallback reconnection. It closes all nodes and removes its
 state. No game packages, server, LAN broadcast or public bootstrap are required.
 
 For an external local consumer, use `require p2p-park v0.0.0` and
@@ -168,3 +168,35 @@ has a bounded one-second window. LAN and explicit stores retain the existing
 best-effort routing-state semantics, not identity-trust persistence. The existing
 Unix LAN implementation also applies to builds importing the engine. No Windows
 support or independently audited security is claimed.
+
+## Public invitations (Phase 3)
+
+Use `Engine.Invitation(addresses, expires)` to advertise only the node's own keys,
+`Invitation.Encode` for a canonical `p2p://invite/...` URI, and `ParseInvitation`
+before creating a receiving node in that overlay. `Engine.Join(ctx, invitation,
+JoinOptions)` authenticates both bootstrap keys and reports partial successes.
+Manual bootstrap configuration and Connect are unchanged. Private/loopback/CGNAT
+invitation destinations need explicit local AllowedCIDRs; source data cannot grant
+that approval. No app permissions or membership lists are imported.
+
+Read the [versioned format, address policy and API contract](../docs/INVITATIONS.md)
+and [API stability review](../docs/PHASE3_API_REVIEW.md). V1 invitations are public,
+unsigned discovery hints; use a trusted sharing channel. Endpoint authentication
+is not issuer authenticity, application authority, secrecy or NAT traversal.
+No shared password/account or browser frontend is required. The echo example is
+localhost-only and proves no Internet-wide connectivity.
+
+## Compatibility and eventual packaging
+
+The [API/version policy](../docs/API_VERSION_POLICY.md) records lifecycle,
+concurrency, error and invitation contracts. Versioned public fixture bytes are
+checked by Go and a separate Python codec at a fixed test clock. Production
+expiry checks still use the real clock. No new public API is added in Phase 4.
+A temporary independent Go consumer builds/runs with local replace in CI; no module
+has been published. See [packaging readiness](../docs/PHASE4_REVIEW.md).
+
+For authorized real-host tests, the [netcheck consumer and owner plan](../docs/CROSS_HOST_TEST_PLAN.md)
+use verified round trips and explicit address scopes. Current evidence is local;
+no LAN/WAN, real firewall/partition or NAT success is claimed. Per-link gossip
+relays can observe plaintext payloads/metadata; the engine provides no current
+opaque relay circuit or automatic NAT traversal.

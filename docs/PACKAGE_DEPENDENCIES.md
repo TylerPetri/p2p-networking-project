@@ -1,4 +1,8 @@
-# Package dependency map (Phase 2)
+# Package dependency map (Phases 2–4)
+
+Phase 4 adds a public-API diagnostic consumer; the engine adds no project
+dependency edges or external libraries. See
+[the invitation/API review](PHASE3_API_REVIEW.md).
 
 Production imports measured with `go list -f`; external/standard-library imports
 are omitted. [Phase 2 review](PHASE2_ENGINE_ADAPTER.md) records the before/after.
@@ -18,6 +22,7 @@ are omitted. [Phase 2 review](PHASE2_ENGINE_ADAPTER.md) records the before/after
 | `internal/app/quiz` | `internal/gameproto` |
 | `cmd/park-node` | `internal/park-node` |
 | `examples/echo` | `engine` |
+| `examples/netcheck` | `engine` |
 
 The Park/CLI/application dependency graph reaches networking **only through
 `engine`**. `internal/gameproto` contains game DTOs and canonical encoders without

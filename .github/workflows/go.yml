@@ -17,11 +17,14 @@ jobs:
         with:
           go-version: '1.27.x'
       - run: python3 scripts/check_engine_boundary.py
+      - run: python3 scripts/check_invitation_vectors.py
+      - run: python3 scripts/check_external_consumer.py
       - run: go vet ./...
       - run: go test -count=1 ./...
       - run: go test -race -count=1 ./...
       - run: go test -race -count=20 ./internal/crypto/noiseconn ./internal/dht ./internal/crypto/channel
       - run: go test -race -count=10 -run 'TestSession|TestIdentify|TestStop|TestGossip|TestNAT|TestEncrypted|TestDHT|TestSigned|TestAdmission|TestSlow|TestOldSession|TestCorrectOutboundPin|TestEngine|TestRelayedTransport' ./internal/p2p
+      - run: go test ./engine -run '^$' -fuzz '^FuzzInvitationParse$' -fuzztime=5s -parallel=2
       - run: go test ./internal/p2p -run '^$' -fuzz '^FuzzEnvelopeDecoder$' -fuzztime=5s -parallel=2
       - run: go test ./internal/dht -run '^$' -fuzz '^FuzzRecordValidation$' -fuzztime=5s -parallel=2
       - run: go test ./internal/crypto/channel -run '^$' -fuzz '^FuzzChannelDecrypt$' -fuzztime=5s -parallel=2
@@ -29,6 +32,7 @@ jobs:
       - run: go test -race -count=10 ./engine ./internal/park-node
       - run: go run ./examples/echo
       - run: python3 scripts/demo.py
+      - run: python3 scripts/check_netcheck.py
       - name: Scan reachable Git history for secrets
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.24.3

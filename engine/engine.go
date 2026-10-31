@@ -93,6 +93,8 @@ type Engine struct {
 	state        int // new=0, running=1, closed=2; no restart of a closed instance
 	node         *p2p.Node
 	application  string
+	networkID    string
+	peerPins     map[netx.Addr]string
 	done         chan struct{}
 	messages     chan Message
 	events       chan Event
@@ -168,7 +170,7 @@ func New(cfg Config) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Engine{lan: cfg.LANDiscovery, lanStorePath: cfg.LANPeerStorePath, node: n, application: cfg.Application, done: make(chan struct{}), messages: make(chan Message, 128), events: make(chan Event, 128)}, nil
+	return &Engine{networkID: cfg.NetworkID, peerPins: pins, lan: cfg.LANDiscovery, lanStorePath: cfg.LANPeerStorePath, node: n, application: cfg.Application, done: make(chan struct{}), messages: make(chan Message, 128), events: make(chan Event, 128)}, nil
 }
 
 // Start is one-shot. Its context owns the engine lifetime, including established
