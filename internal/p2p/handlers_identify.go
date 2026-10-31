@@ -4,7 +4,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 )
 
 func (n *Node) sendIdentify(p *peer) error {

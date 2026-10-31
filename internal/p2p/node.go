@@ -10,15 +10,21 @@ import (
 	"net/netip"
 	"p2p-park/internal/dht"
 	"p2p-park/internal/netx"
-	"p2p-park/internal/proto"
 	"p2p-park/internal/telemetry"
+	proto "p2p-park/internal/wire"
 	"sync"
 	"time"
 )
 
 type NodeConfig struct {
-	MaxConnections int
-	MessageTimeout time.Duration
+	Identity         *Identity
+	NetworkID        string
+	Restricted       bool
+	ApprovedPeers    []string
+	DisablePeerStore bool
+	PeerStorePath    string
+	MaxConnections   int
+	MessageTimeout   time.Duration
 	// Explicit operator trust: address -> expected Noise static key hex.
 	PeerPins map[netx.Addr]string
 	// Automatic discovery never resolves DNS; additional numeric destinations
@@ -65,6 +71,7 @@ type PeerSnapshot struct {
 }
 
 type Node struct {
+	approved          map[string]bool
 	lifeMu            sync.Mutex
 	sessions          sync.WaitGroup
 	workers           sync.WaitGroup
@@ -108,6 +115,7 @@ func NewNode(cfg NodeConfig) (*Node, error) {
 		pins[addr] = id
 	}
 	cfg.PeerPins = pins
+	cfg.Bootstraps = append([]netx.Addr(nil), cfg.Bootstraps...)
 	var prefixes []netip.Prefix
 	for _, s := range cfg.DiscoveryCIDRs {
 		p, err := netip.ParsePrefix(s)
@@ -119,17 +127,38 @@ func NewNode(cfg NodeConfig) (*Node, error) {
 	if cfg.Logger == nil {
 		cfg.Logger = log.Default()
 	}
-	id, err := NewIdentity()
+	var id *Identity
+	var err error
+	if cfg.Identity == nil {
+		id, err = NewIdentity()
+	} else {
+		id, err = CloneIdentity(cfg.Identity)
+	}
 	if err != nil {
 		return nil, err
 	}
-	dd, err := dht.New(id.ID, dht.WithStore(""))
+	if cfg.NetworkID != "" && !validPeerID(cfg.NetworkID) {
+		return nil, fmt.Errorf("invalid network ID")
+	}
+	approved := make(map[string]bool)
+	for _, pid := range cfg.ApprovedPeers {
+		if !validPeerID(pid) {
+			return nil, fmt.Errorf("invalid approved peer ID")
+		}
+		approved[pid] = true
+	}
+	var opts []dht.Option
+	if !cfg.DisablePeerStore {
+		opts = append(opts, dht.WithStore(cfg.PeerStorePath))
+	}
+	dd, err := dht.New(id.ID, opts...)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	n := &Node{
 		cfg:               cfg,
+		approved:          approved,
 		slots:             make(chan struct{}, cfg.MaxConnections),
 		referrals:         make(chan referral, 64),
 		dialing:           make(map[netx.Addr]string),
@@ -171,7 +200,8 @@ func (n *Node) Start() error {
 	n.launchWorker(n.acceptLoop)
 	n.launchWorker(n.referralLoop)
 
-	n.coldStartDHTBootstrap()
+	// Stored peers may be slow; startup must not block on their TCP dials.
+	n.launchWorker(n.coldStartDHTBootstrap)
 
 	n.launchWorker(n.discoveryLoop)
 

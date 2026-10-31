@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 	"time"
 )
 

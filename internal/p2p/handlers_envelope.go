@@ -3,7 +3,7 @@ package p2p
 import (
 	"encoding/json"
 	"p2p-park/internal/netx"
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 	"time"
 )
 
@@ -36,7 +36,10 @@ func (n *Node) handleEnvelope(p *peer, env proto.Envelope) {
 			n.queueReferral(netx.Addr(pi.Addr), pi.ID)
 		}
 	case proto.MsgGossip:
-		if !verifyGossip(env, time.Now()) {
+		if env.NetworkID != n.cfg.NetworkID || !n.admitted(env.FromID) || !verifyGossip(env, time.Now()) {
+			return
+		}
+		if env.Recipient != "" && env.Recipient != n.ID() {
 			return
 		}
 		var g proto.Gossip
@@ -54,7 +57,9 @@ func (n *Node) handleEnvelope(p *peer, env proto.Envelope) {
 		case n.incoming <- env:
 		default:
 		}
-		n.relay(p.id, env)
+		if env.Recipient == "" {
+			n.relay(p.id, env)
+		}
 	case proto.MsgIdentify:
 		n.handleIdentify(p, env)
 	case proto.MsgNatRegister:

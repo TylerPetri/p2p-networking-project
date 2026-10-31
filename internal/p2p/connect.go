@@ -63,7 +63,12 @@ func (n *Node) handleConn(rawConn netx.Conn, inbound bool) {
 	n.runConn(rawConn, inbound, "")
 }
 
-func (n *Node) runConn(rawConn netx.Conn, inbound bool, expected string) {
+func (n *Node) runConn(rawConn netx.Conn, inbound bool, expected string, ready ...chan error) {
+	notify := func(err error) {
+		if len(ready) > 0 {
+			ready[0] <- err
+		}
+	}
 	stopCancel := context.AfterFunc(n.ctx, func() { _ = rawConn.Close() })
 	defer stopCancel()
 	// Include Noise and both Hello reads/writes, even for transports without deadlines.
@@ -71,14 +76,17 @@ func (n *Node) runConn(rawConn netx.Conn, inbound bool, expected string) {
 	p, secureCloser, err := n.establishPeer(rawConn, inbound, expected)
 	setupTimer.Stop()
 	if err != nil {
+		notify(err)
 		n.Logf("conn setup failed (inbound=%v): %v", inbound, err)
 		_ = rawConn.Close()
 		return
 	}
 	if p == nil {
+		notify(ErrPeerClosed)
 		_ = rawConn.Close()
 		return
 	}
+	notify(nil)
 	defer func() {
 		n.removePeer(p.id, p)
 		if p.writerDone != nil {

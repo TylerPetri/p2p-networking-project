@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 )
 
 const gossipLifetime = 5 * time.Minute
@@ -26,6 +26,7 @@ func (n *Node) signGossip(env proto.Envelope) (proto.Envelope, error) {
 		return env, errors.New("cannot sign another origin")
 	}
 	env.FromID = n.ID()
+	env.NetworkID = n.cfg.NetworkID
 	env.OriginPub = append([]byte(nil), n.id.SignPub...)
 	env.OriginBinding = ed25519.Sign(n.id.SignPriv, identityBinding(n.id.NoisePub[:]))
 	env.SentUnix = time.Now().Unix()

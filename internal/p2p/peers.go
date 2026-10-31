@@ -1,7 +1,7 @@
 package p2p
 
 import (
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 )
 
 func (n *Node) addPeer(p *peer) bool {

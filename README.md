@@ -1,4 +1,4 @@
-# P2P-Park
+# P2P networking engine and P2P-Park
 
 A Go peer-to-peer network where independent nodes discover one another, establish
 encrypted connections, and exchange signed gossip. Run three local processes to
@@ -13,14 +13,44 @@ when peers send malformed data or stop responding.
 This is an experimental portfolio project. It is not a production messaging
 system, and its protocol has not been independently verified or audited. See
 [SECURITY.md](SECURITY.md) and the [engineering review](docs/SECURITY_REVIEW.md)
-for the threat model and [Pass 2 review](docs/PASS2_REVIEW.md) for current findings,
+for the threat model and [Pass 2 review](docs/PASS2_REVIEW.md) for baseline findings,
 test evidence and resource budgets. The [final review](docs/FINAL_REVIEW.md) records
-merge readiness, compatibility and remaining limitations.
+the prior portfolio merge assessment, compatibility and remaining limitations.
+The [engine extraction review](docs/ENGINE_REVIEW.md) records this phase.
+
+## Application-independent engine (Phase 1)
+
+The public [`engine`](engine/README.md) package lets a Go application create or
+join an overlay, persist an identity, bootstrap/discover peers, send authenticated
+messages, use validated DHT records and observe peer events. It builds on the
+existing networking implementation. P2P-Park remains the working game/CLI; no
+new game features are part of this extraction. The game still uses the shared
+internal core through its legacy adapter; migrating it to the facade is Phase 2.
+
+```sh
+go run ./examples/echo
+```
+
+This standalone example starts three loopback engine nodes and checks signed
+gossip delivery without importing game code. It creates and removes temporary
+identity files, closes all nodes and prints `PASS`. For configuration, API error
+and concurrency semantics, see the [API guide](engine/README.md); for the package
+boundary map, admission choices and future extraction path, see the
+[architecture assessment](docs/ENGINE_ARCHITECTURE.md).
+
+Engine peers use `p2p-engine/0.1.0`, a public network identifier and either open
+admission or static approved-peer admission. Engine and Park `0.2.0` peers reject
+one another safely; neither negotiates versions. Membership is separate from
+application authorization. The engine API exposes verified messages, not raw
+control envelopes or private signing keys. This remains experimental networking,
+not a production security or enterprise authorization platform.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
+    Example[examples/echo or future application] --> Engine[Public engine API]
+    Engine --> P2P
     CLI[park-node CLI] --> Apps[Chat / points / quizzes / grants]
     Apps --> P2P[Peer lifecycle / gossip / relay]
     Discovery[Bootstrap / peer lists / optional UDP LAN discovery] --> P2P
@@ -38,7 +68,8 @@ flowchart LR
 - Each connection binds its network ID to the Noise static key. An Ed25519
   signature binds the separate signing key to that static key. This proves key
   possession, not a person's identity or trustworthiness. Keys are generated
-  on each node start; there is no persistent identity or trusted-key directory.
+  on each game-node start. The engine optionally loads persistent identities;
+  neither interface provides a trusted-key directory.
   Optional outbound `-pins address=Noise-ID` checks an expected key supplied by
   the operator; it does not silently trust a key on first use.
 - `internal/p2p` owns peer sessions, bounded connections and outbound queues,
@@ -91,10 +122,10 @@ sequenceDiagram
     Note over A,B: Relays preserve signatures; receivers check replay window
 ```
 
-Transport keys and signing keys stay in process memory and are regenerated at
-startup. Channel keys are generated with `crypto/rand`, displayed only when
-explicitly creating a channel, and shared out of band. No automatic persistent
-key storage or rotation protocol is implemented.
+Game transport keys and signing keys stay in process memory and are regenerated
+at startup. The engine can explicitly persist these keys in a private plaintext
+identity file; it does not automatically rotate them. Channel keys are generated with `crypto/rand`, displayed only when
+explicitly creating a channel, and shared out of band. No automatic key-rotation protocol is implemented.
 
 ## Local three-node demo
 
@@ -140,6 +171,8 @@ outside this demo and advertises/responds on UDP port 42042.
 go vet ./...
 go test -count=1 ./...
 go test -race -count=1 ./...
+go test -race -count=10 ./engine
+python3 scripts/check_engine_boundary.py
 go test -race -count=20 ./internal/crypto/noiseconn ./internal/dht ./internal/crypto/channel
 go test -race -count=10 -run 'TestSession|TestIdentify|TestStop|TestGossip|TestNAT|TestEncrypted|TestDHT' ./internal/p2p
 # Optional: real UDP broadcast tests; run only on an isolated test network.

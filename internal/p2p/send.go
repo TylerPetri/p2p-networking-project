@@ -2,7 +2,7 @@ package p2p
 
 import (
 	"fmt"
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 )
 
 type SendPolicy int
@@ -13,33 +13,36 @@ const (
 )
 
 func (n *Node) sendAsyncWithPolicy(p *peer, env proto.Envelope, policy SendPolicy) {
+	_ = n.enqueue(p, env, policy)
+}
+func (n *Node) enqueue(p *peer, env proto.Envelope, policy SendPolicy) error {
 	if env.Type == proto.MsgGossip && len(env.Signature) == 0 {
 		var err error
 		env, err = n.signGossip(env)
 		if err != nil {
-			return
+			return err
 		}
 	}
 	if !validEnvelopeSize(env) {
-		return
+		return ErrResourceLimit
 	}
 	select {
 	case <-p.ctx.Done():
-		// peer is closing; just drop
-		return
+		// peer is closing
+		return ErrPeerClosed
 	default:
 	}
 
 	select {
 	case p.sendCh <- env:
-		return
+		return nil
 	default:
 		if policy == SendDisconnect {
 			// No goroutine per dropped message: a slow peer cannot amplify workers.
 			n.removePeer(p.id, p)
 			n.Logf("dropping peer %s: send buffer full", p.id)
 		}
-		// else: drop the message
+		return ErrResourceLimit
 	}
 }
 
@@ -65,7 +68,7 @@ func (n *Node) SendToPeer(id string, env proto.Envelope) error {
 	p, ok := n.peers[id]
 	n.mu.RUnlock()
 	if !ok {
-		return fmt.Errorf("unknown peer %q", id)
+		return fmt.Errorf("%w: %q", ErrPeerClosed, id)
 	}
 
 	if env.Type == proto.MsgGossip && len(env.Signature) == 0 {
@@ -78,6 +81,5 @@ func (n *Node) SendToPeer(id string, env proto.Envelope) error {
 	if !validEnvelopeSize(env) {
 		return ErrResourceLimit
 	}
-	n.sendAsync(p, env)
-	return nil
+	return n.enqueue(p, env, SendDisconnect)
 }

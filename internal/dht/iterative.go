@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 )
 
 type LookupConfig struct {
