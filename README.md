@@ -65,7 +65,7 @@ flowchart LR
   `github.com/flynn/noise`: XX, X25519, ChaCha20-Poly1305, BLAKE2s. Ciphertext
   frames are capped at 65,535 bytes before allocation; larger writes are split.
   A separate 128 KiB newline-delimited JSON envelope limit applies across frames.
-- Each connection binds its network ID to the Noise static key. An Ed25519
+- Each connection verifies its peer ID against the Noise static key. An Ed25519
   signature binds the separate signing key to that static key. This proves key
   possession, not a person's identity or trustworthiness. Keys are generated
   on each game-node start. The engine optionally loads persistent identities;
@@ -115,7 +115,7 @@ sequenceDiagram
     A->>B: Noise XX ephemeral key
     B->>A: XX response + signed signing-key/static-key binding
     A->>B: XX completion + signed identity binding
-    A->>B: Encrypted Hello (network ID, protocol, listen port)
+    A->>B: Encrypted Hello (peer ID, protocol, listen port)
     B->>A: Encrypted Hello
     Note over A,B: Check bindings, expected outbound pin, protocol and budgets
     A->>B: Signed timestamped gossip inside bounded encrypted frames
