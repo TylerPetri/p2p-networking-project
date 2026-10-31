@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"time"
 
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 )
 
 type PublishConfig struct {

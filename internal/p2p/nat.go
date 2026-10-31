@@ -3,7 +3,7 @@ package p2p
 import (
 	"encoding/hex"
 	"encoding/json"
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 )
 
 func (n *Node) sendNatRegister(p *peer) error {

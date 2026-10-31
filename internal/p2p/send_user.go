@@ -3,7 +3,7 @@ package p2p
 import (
 	"fmt"
 
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 )
 
 // NetworkPeerIDForUserID returns the connected network peer id (Noise public key hex)

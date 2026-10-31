@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"p2p-park/internal/dht"
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 )
 
 // Network is an in-process deterministic "transport" for DHT testing.

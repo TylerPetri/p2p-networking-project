@@ -7,11 +7,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"p2p-park/internal/crypto/noiseconn"
 	"p2p-park/internal/netx"
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 	"strconv"
 	"time"
 )
@@ -123,6 +124,40 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool, expected ...string
 		return nil, nil, errors.New("invalid advertised listen endpoint")
 	}
 	hello.Listen = net.JoinHostPort(remoteHost, port)
+	if hello.NetworkID != n.cfg.NetworkID {
+		return nil, secure, fmt.Errorf("network mismatch")
+	}
+	if !n.admitted(env.FromID, remoteUserID) {
+		return nil, secure, ErrAdmissionDenied
+	}
+	if n.cfg.NetworkID != "" {
+		readReady := func() error {
+			ack, err := n.readEnvelopeWithTimeout(rawConn, dec, 5*time.Second)
+			if err != nil {
+				return err
+			}
+			if ack.Type != proto.MsgReady || ack.FromID != env.FromID {
+				return fmt.Errorf("invalid admission acknowledgement")
+			}
+			return nil
+		}
+		writeReady := func() error { return enc.Encode(proto.Envelope{Type: proto.MsgReady, FromID: n.ID()}) }
+		if inbound {
+			if err := readReady(); err != nil {
+				return nil, secure, err
+			}
+			if err := writeReady(); err != nil {
+				return nil, secure, err
+			}
+		} else {
+			if err := writeReady(); err != nil {
+				return nil, secure, err
+			}
+			if err := readReady(); err != nil {
+				return nil, secure, err
+			}
+		}
+	}
 	peerID := env.FromID
 	pctx, cancel := context.WithCancel(n.ctx)
 	p := &peer{
@@ -202,9 +237,10 @@ func (n *Node) readEnvelopeWithTimeout(rawConn netx.Conn, dec interface{ Decode(
 
 func (n *Node) sendHello(enc *json.Encoder) error {
 	h := proto.Hello{
-		Name:     n.cfg.Name,
-		Listen:   string(n.addr),
-		Protocol: n.cfg.Protocol,
+		NetworkID: n.cfg.NetworkID,
+		Name:      n.cfg.Name,
+		Listen:    string(n.addr),
+		Protocol:  n.cfg.Protocol,
 	}
 	env := proto.Envelope{
 		Type:    proto.MsgHello,

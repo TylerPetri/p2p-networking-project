@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 )
 
 // RecordStore retains a key's record type until deletion/expiry; Get is untyped.

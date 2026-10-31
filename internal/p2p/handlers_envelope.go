@@ -1,9 +1,10 @@
 package p2p
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"p2p-park/internal/netx"
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/wire"
 	"time"
 )
 
@@ -36,7 +37,22 @@ func (n *Node) handleEnvelope(p *peer, env proto.Envelope) {
 			n.queueReferral(netx.Addr(pi.Addr), pi.ID)
 		}
 	case proto.MsgGossip:
-		if !verifyGossip(env, time.Now()) {
+		if env.NetworkID != n.cfg.NetworkID || !verifyGossip(env, time.Now()) {
+			return
+		}
+		if !n.admitted(env.FromID, hex.EncodeToString(env.OriginPub)) {
+			return
+		}
+		// A relay cannot replace a currently authenticated peer's signing key.
+		// Unknown open-network transport-ID claims still require out-of-band trust.
+		n.mu.RLock()
+		known := n.peers[env.FromID]
+		mismatch := known != nil && known.userID != "" && known.userID != hex.EncodeToString(env.OriginPub)
+		n.mu.RUnlock()
+		if mismatch {
+			return
+		}
+		if env.Recipient != "" && env.Recipient != n.ID() {
 			return
 		}
 		var g proto.Gossip
@@ -54,7 +70,9 @@ func (n *Node) handleEnvelope(p *peer, env proto.Envelope) {
 		case n.incoming <- env:
 		default:
 		}
-		n.relay(p.id, env)
+		if env.Recipient == "" {
+			n.relay(p.id, env)
+		}
 	case proto.MsgIdentify:
 		n.handleIdentify(p, env)
 	case proto.MsgNatRegister:

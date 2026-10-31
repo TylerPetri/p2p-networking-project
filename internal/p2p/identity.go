@@ -1,9 +1,11 @@
 package p2p
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"io"
 
 	"golang.org/x/crypto/curve25519"
@@ -57,4 +59,21 @@ func NewIdentity() (*Identity, error) {
 		NoisePub:  nPub,
 		ID:        id,
 	}, nil
+}
+
+// CloneIdentity validates and owns independent key slices before any networking.
+func CloneIdentity(in *Identity) (*Identity, error) {
+	if in == nil || len(in.SignPriv) != ed25519.PrivateKeySize || len(in.SignPub) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("invalid identity")
+	}
+	priv := ed25519.NewKeyFromSeed(in.SignPriv.Seed())
+	pub := priv.Public().(ed25519.PublicKey)
+	noisePub, err := curve25519.X25519(in.NoisePriv[:], curve25519.Basepoint)
+	if err != nil || !bytes.Equal(priv, in.SignPriv) || !bytes.Equal(pub, in.SignPub) || !bytes.Equal(noisePub, in.NoisePub[:]) || hex.EncodeToString(noisePub) != in.ID {
+		return nil, fmt.Errorf("inconsistent identity keys")
+	}
+	out := *in
+	out.SignPriv = append(ed25519.PrivateKey(nil), priv...)
+	out.SignPub = append(ed25519.PublicKey(nil), pub...)
+	return &out, nil
 }
