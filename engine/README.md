@@ -154,8 +154,8 @@ independently security-audited.
 
 `Identity` implements standard `crypto.Signer`: `Public()` returns a copied
 Ed25519 public key; `Sign(rand.Reader, canonicalBytes, crypto.Hash(0))` signs an
-application record without exposing private-key bytes. Other hash modes are
-rejected by standard Ed25519. Applications own canonicalization and authority.
+application record without exposing private-key bytes. Unsupported hash/options are rejected by the standard library; the existing
+game formats use Hash(0). Applications own canonicalization and authority.
 Signing is safe concurrently for immutable identities and is independent of a
 particular engine lifecycle. This local capability must not be exposed as an
 unrestricted remote signing service.
