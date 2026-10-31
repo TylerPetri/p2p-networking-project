@@ -1,27 +1,37 @@
-# Package dependency map (Phase 1)
+# Package dependency map (Phase 2)
 
-Direct project-package imports, obtained with `go list -f` on this branch.
-Standard-library and external imports are omitted for readability. Tests may
-import legacy wire aliases to exercise compatibility; this map is production code.
+Production imports measured with `go list -f`; external/standard-library imports
+are omitted. [Phase 2 review](PHASE2_ENGINE_ADAPTER.md) records the before/after.
 
 | Package | Direct project dependencies |
 | --- | --- |
-| `engine` | `internal/netx`, `internal/p2p`, `internal/wire` |
+| `engine` | `internal/discovery`, `internal/netx`, `internal/p2p`, `internal/wire` |
 | `internal/p2p` | `internal/crypto/noiseconn`, `internal/dht`, `internal/netx`, `internal/telemetry`, `internal/wire` |
 | `internal/dht` | `internal/appdata`, `internal/wire` |
 | `internal/wire` |  |
-| `internal/proto` | `internal/wire` |
-| `internal/park-node` | `internal/app/grants`, `internal/app/points`, `internal/app/quiz`, `internal/crypto/channel`, `internal/discovery`, `internal/netx`, `internal/p2p`, `internal/paths`, `internal/proto`, `internal/storage/grantsbolt`, `internal/telemetry`, `internal/uiutil` |
+| `internal/proto` | `internal/gameproto`, `internal/wire` |
+| `internal/gameproto` |  |
+| `internal/park-node` | `engine`, `internal/app/grants`, `internal/app/points`, `internal/app/quiz`, `internal/appdata`, `internal/crypto/channel`, `internal/gameproto`, `internal/paths`, `internal/storage/grantsbolt`, `internal/telemetry`, `internal/uiutil` |
 | `internal/discovery` | `internal/appdata`, `internal/netx`, `internal/p2p` |
 | `internal/bootstrap` | `internal/discovery`, `internal/netx`, `internal/p2p` |
-| `cmd/park-node` | `internal/netx`, `internal/park-node` |
+| `internal/app/points` | `internal/gameproto` |
+| `internal/app/quiz` | `internal/gameproto` |
+| `cmd/park-node` | `internal/park-node` |
 | `examples/echo` | `engine` |
 
-The production engine closure additionally contains `internal/crypto/noiseconn`,
-`internal/telemetry` and `internal/appdata` (only the optional DHT routing-store
-path helper). It contains no game schemas, quiz/points/grants, CLI, channel UI or
-BoltDB. `scripts/check_engine_boundary.py` enforces that boundary in CI for both
-engine and standalone example. The internal `appdata` default remains for legacy
-Park; the engine disables implicit persistence and uses an explicit store path.
-No second module is necessary while the facade and legacy adapter share the core.
-See [architecture decisions](ENGINE_ARCHITECTURE.md) for future module extraction.
+The Park/CLI/application dependency graph reaches networking **only through
+`engine`**. `internal/gameproto` contains game DTOs and canonical encoders without
+wire dependencies. Legacy `internal/proto` re-exports these types for compatibility
+with core security tests; it is not imported by production game code.
+
+The engine uses the same existing core and optional discovery implementation.
+Its dependency closure contains no game schemas/logic, game channel UI or BoltDB.
+`internal/appdata` is a local path helper, not a networking capability. Park keeps
+its application channel cryptography and data-directory helpers on its own side.
+
+`scripts/check_engine_boundary.py` enforces both directions in CI: the engine's
+complete production closure excludes game packages; Park's complete application
+closure stops at `engine` and rejects all other routes to networking internals.
+No separate module/repository is needed to prove this boundary. A future extraction
+can move the public package and its generic internal closure together, with an
+explicit import-path/API migration plan; no module is published in this phase.

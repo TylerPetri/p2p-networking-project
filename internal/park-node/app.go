@@ -2,23 +2,21 @@ package parknode
 
 import (
 	"context"
-	"encoding/hex"
-	"encoding/json"
 	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"crypto/ed25519"
+	"p2p-park/engine"
 	"p2p-park/internal/app/grants"
 	"p2p-park/internal/app/points"
 	"p2p-park/internal/app/quiz"
+	"p2p-park/internal/appdata"
 	"p2p-park/internal/crypto/channel"
-	"p2p-park/internal/discovery"
-	"p2p-park/internal/netx"
-	"p2p-park/internal/p2p"
+	proto "p2p-park/internal/gameproto"
 	"p2p-park/internal/paths"
-	"p2p-park/internal/proto"
 	"p2p-park/internal/storage/grantsbolt"
 	"p2p-park/internal/telemetry"
 )
@@ -31,10 +29,14 @@ type App struct {
 	ui              Printer
 	logger          telemetry.Logger
 
-	Node *p2p.Node
+	Network  *engine.Engine
+	net      *parkNetwork
+	identity *engine.Identity
+	work     sync.WaitGroup
+	lifeMu   sync.Mutex
+	started  bool
+	closed   bool
 
-	// Discovery lifecycle
-	stopLAN  chan struct{}
 	stopOnce sync.Once
 
 	// Points engine
@@ -50,32 +52,31 @@ type App struct {
 	// Encrypted channels
 	encMu       sync.RWMutex
 	encChannels map[string]channel.ChannelKey
-
-	// Points cache (other users)
-	pointsMu    sync.RWMutex
-	otherPoints map[string]proto.PointsSnapshot
 }
 
 func New(cfg Config, logger *log.Logger) (*App, error) {
-	n, err := p2p.NewNode(p2p.NodeConfig{
-		Name:           cfg.Name,
-		PeerPins:       cfg.PeerPins,
-		DiscoveryCIDRs: cfg.DiscoveryCIDRs,
-		Network:        netx.NewTCPNetwork(),
-		BindAddr:       cfg.Bind,
-		Bootstraps:     cfg.Bootstraps,
-		Protocol:       proto.ApplicationProtocol,
-		Logger:         logger,
-		Debug:          cfg.Debug,
-		IsSeed:         cfg.IsSeed,
-	})
+	if cfg.NetworkID == "" {
+		cfg.NetworkID = DefaultNetworkID
+	}
+	identity := cfg.Identity
+	var err error
+	if identity == nil {
+		identity, err = engine.GenerateIdentity()
+		if err != nil {
+			return nil, err
+		}
+	}
+	stateDir := cfg.DiscoveryStateDir
+	if stateDir == "" {
+		stateDir = appdata.Dir()
+	}
+	n, err := engine.New(engine.Config{Debug: cfg.Debug, Logger: logger, Name: cfg.Name, Bind: cfg.Bind, NetworkID: cfg.NetworkID, Application: "p2p-park.0.3.0", Identity: identity, Bootstraps: cfg.Bootstraps, PeerPins: cfg.PeerPins, DiscoveryCIDRs: cfg.DiscoveryCIDRs, Admission: cfg.Admission, ApprovedPeers: cfg.ApprovedPeers, LANDiscovery: !cfg.DisableLAN, LANPeerStorePath: filepath.Join(stateDir, "peers.json"), PeerStorePath: filepath.Join(stateDir, "dht.json"), Rendezvous: cfg.IsSeed})
 	if err != nil {
 		return nil, err
 	}
-
-	id := n.Identity()
-	pe := points.NewEngine(cfg.Name, id.SignPriv, id.SignPub)
-	qe := quiz.NewEngine(cfg.Name, id.SignPriv, id.SignPub)
+	pub := ed25519.PublicKey(identity.SigningPublicKey())
+	pe := points.NewEngineWithSigner(cfg.Name, identity, pub)
+	qe := quiz.NewEngineWithSigner(cfg.Name, identity, pub)
 	ld := grants.NewLedger()
 
 	// Persistent grant store (BoltDB)
@@ -89,6 +90,7 @@ func New(cfg Config, logger *log.Logger) (*App, error) {
 	dbPath := filepath.Join(dataDir, "grants.bolt")
 	gs, err := grantsbolt.Open(dbPath)
 	if err != nil {
+		_ = n.Close()
 		return nil, err
 	}
 	// Replay persisted grants into the in-memory ledger.
@@ -96,93 +98,95 @@ func New(cfg Config, logger *log.Logger) (*App, error) {
 		ld.ApplyGrant(g)
 		return nil
 	})
-	ld.NoteName(hex.EncodeToString(id.SignPub), cfg.Name)
+	ld.NoteName(identity.SigningID(), cfg.Name)
 
 	return &App{
 		cfg:         cfg,
 		logger:      logger,
 		ui:          NewStdPrinter(os.Stdout),
-		Node:        n,
-		stopLAN:     make(chan struct{}),
+		Network:     n,
+		net:         &parkNetwork{engine: n},
+		identity:    identity,
 		Points:      pe,
 		Quiz:        qe,
 		Ledger:      ld,
 		GrantStore:  gs,
 		encChannels: make(map[string]channel.ChannelKey),
-		otherPoints: make(map[string]proto.PointsSnapshot),
 	}, nil
 }
 
+// DefaultNetworkID is public demo configuration, never a membership secret.
+const DefaultNetworkID = "ed2d71df168e78e79f28854f86f7f57ed8db56d99e531ae07fca45f3fd387ce2"
+
 func (a *App) Start() error {
-	if err := a.Node.Start(); err != nil {
+	a.lifeMu.Lock()
+	defer a.lifeMu.Unlock()
+	if a.closed {
+		return engine.ErrClosed
+	}
+	if a.started {
+		return engine.ErrAlreadyStarted
+	}
+	if err := a.Network.Start(context.Background()); err != nil {
 		return err
 	}
-
-	if !a.cfg.DisableLAN {
-		lanCfg := discovery.DefaultLANConfig()
-
-		if err := discovery.StartLANResponder(a.stopLAN, lanCfg, string(a.Node.ListenAddr()), a.Node.Name()); err != nil {
-			a.logf("LAN responder failed: %v", err)
-		}
-
-		ps := discovery.NewPeerStore(discovery.DefaultPeerStorePath())
-		mgr := discovery.NewManager(ps, lanCfg)
-		mgr.Run(a.Node)
-	}
-
-	// Broadcast initial signed points snapshot
+	a.started = true
+	a.work.Add(1)
+	go func() { defer a.work.Done(); a.serve() }()
 	if snap, err := a.Points.SnapshotSelf(); err == nil {
 		a.broadcastPoints(snap)
 	}
-
 	return nil
 }
 
+// Run owns only CLI activity; application networking starts with Start, including
+// for non-interactive consumers. Signal cancellation joins through StopAll.
 func (a *App) Run(ctx context.Context) error {
-	PrintBanner(a.ui, a.Node)
-
-	// CLI input loop
-	go a.readStdin(ctx)
-
-	// Event emitter
-	go func() {
-		for {
-			var ev p2p.Event
-			select {
-			case <-ctx.Done():
-				return
-			case <-a.Node.Done():
-				return
-			case ev = <-a.Node.Events():
-			}
-			switch ev.Type {
-			case p2p.EventPeerConnected:
-				a.ui.Printf("[NET] peer connected: %s (%s)\n", ev.PeerName, ev.PeerAddr)
-				a.initiateGrantSync(ev.PeerID)
-			case p2p.EventPeerDisconnected:
-				a.ui.Printf("[NET] peer disconnected: %s\n", ev.PeerID)
-			}
-		}
-	}()
-
-	// Inbound loop (envelopes)
+	PrintBanner(a.ui, a.Network, a.cfg.Name)
+	go a.readStdin(ctx) // process-owned stdin cannot be cancelled portably
+	select {
+	case <-ctx.Done():
+	case <-a.Network.Done():
+	}
+	a.StopAll()
+	return nil
+}
+func (a *App) serve() {
 	for {
 		select {
-		case <-ctx.Done():
-			return nil
-		case env, ok := <-a.Node.Incoming():
+		case <-a.Network.Done():
+			return
+		case ev, ok := <-a.Network.Events():
 			if !ok {
-				return nil
+				return
 			}
-			a.handleEnvelope(env)
+			switch ev.Type {
+			case engine.EventPeerConnected:
+				a.ui.Printf("[NET] peer connected: %s (%s)\n", ev.Peer.Name, ev.Peer.Address)
+				a.initiateGrantSync(ev.Peer.ID)
+				if snap, err := a.Points.SnapshotSelf(); err == nil {
+					a.broadcastPoints(snap)
+				}
+			case engine.EventDiscoveryError:
+				a.logf("LAN discovery: %s", ev.Error)
+			case engine.EventPeerDisconnected:
+				a.ui.Printf("[NET] peer disconnected: %s\n", ev.Peer.ID)
+			}
+		case msg, ok := <-a.Network.Messages():
+			if !ok {
+				return
+			}
+			a.handleMessage(msg)
 		}
 	}
 }
-
 func (a *App) StopAll() {
 	a.stopOnce.Do(func() {
-		close(a.stopLAN)
-		_ = a.Node.Stop()
+		a.lifeMu.Lock()
+		a.closed = true
+		a.lifeMu.Unlock()
+		_ = a.Network.Close()
+		a.work.Wait()
 		if a.GrantStore != nil {
 			_ = a.GrantStore.Close()
 		}
@@ -197,16 +201,8 @@ func (a *App) logf(format string, args ...any) {
 	log.Printf(format+"\n", args...)
 }
 
-func (a *App) broadcastPoints(snap proto.SignedPointsSnapshot) {
-	body, _ := json.Marshal(snap)
-	a.Node.Broadcast(proto.Gossip{ID: p2p.NewMsgID(), Channel: "points", Body: body})
-}
-
-// Helper used by /me
-func (a *App) userIDHex() string {
-	id := a.Node.Identity()
-	return hex.EncodeToString(id.SignPub)
-}
+func (a *App) broadcastPoints(snap proto.SignedPointsSnapshot) { a.net.broadcast("points", snap) }
+func (a *App) userIDHex() string                               { return a.identity.SigningID() }
 
 // For “settle” waits after quit
 func sleepBrief() { time.Sleep(100 * time.Millisecond) }

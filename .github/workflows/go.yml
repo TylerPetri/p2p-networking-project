@@ -25,7 +25,8 @@ jobs:
       - run: go test ./internal/p2p -run '^$' -fuzz '^FuzzEnvelopeDecoder$' -fuzztime=5s -parallel=2
       - run: go test ./internal/dht -run '^$' -fuzz '^FuzzRecordValidation$' -fuzztime=5s -parallel=2
       - run: go test ./internal/crypto/channel -run '^$' -fuzz '^FuzzChannelDecrypt$' -fuzztime=5s -parallel=2
-      - run: go test -race -count=10 ./engine
+      - run: GOMAXPROCS=1 go test -race -count=50 -run '^TestStalledConnectCancellationReleasesBudget$' ./engine
+      - run: go test -race -count=10 ./engine ./internal/park-node
       - run: go run ./examples/echo
       - run: python3 scripts/demo.py
       - name: Scan reachable Git history for secrets

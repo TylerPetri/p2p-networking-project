@@ -2,7 +2,6 @@ package parknode
 
 import (
 	"bufio"
-	"encoding/hex"
 	"encoding/json"
 	"os"
 	"strconv"
@@ -10,8 +9,7 @@ import (
 	"time"
 
 	"p2p-park/internal/crypto/channel"
-	"p2p-park/internal/p2p"
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/gameproto"
 )
 
 func (a *App) readStdin(_ any) {
@@ -34,21 +32,20 @@ func (a *App) handleCommand(line string) {
 		os.Exit(0)
 
 	case line == "/me":
-		id := a.Node.Identity()
-		userID := hex.EncodeToString(id.SignPub) // ed25519 pubkey hex
-		networkID := id.ID                       // Noise hex ID
+		userID := a.userIDHex()
+		networkID := a.Network.PeerID() // Noise hex ID
 
 		a.ui.Println()
 		a.ui.Println("== You ==")
-		a.ui.Printf("  Name:       %s\n", a.Node.Name())
+		a.ui.Printf("  Name:       %s\n", a.cfg.Name)
 		a.ui.Printf("  UserID:     %s\n", userID)
-		a.ui.Printf("  NetworkID:  %s\n", networkID)
-		a.ui.Printf("  Listen on:  %s\n", a.Node.ListenAddr())
-		a.ui.Printf("  Peers:      %d\n", a.Node.PeerCount())
+		a.ui.Printf("  PeerID:     %s\n", networkID)
+		a.ui.Printf("  Listen on:  %s\n", a.Network.Address())
+		a.ui.Printf("  Peers:      %d\n", len(a.Network.Peers()))
 		a.ui.Println()
 
 	case line == "/peers":
-		peers := a.Node.SnapshotPeers()
+		peers := a.Network.Peers()
 		if len(peers) == 0 {
 			a.ui.Println("no peers connected")
 			return
@@ -62,17 +59,17 @@ func (a *App) handleCommand(line string) {
 		for _, p := range peers {
 			name := p.Name
 			if name == "" {
-				name = shortID(p.NetworkID)
+				name = shortID(p.ID)
 			}
-			coloredName := formatName(name, p.NetworkID)
+			coloredName := formatName(name, p.ID)
 
 			shortUser := "-"
-			if p.UserID != "" {
-				shortUser = shortID(p.UserID)
+			if p.SigningID != "" {
+				shortUser = shortID(p.SigningID)
 			}
-			shortNet := shortID(p.NetworkID)
+			shortNet := shortID(p.ID)
 
-			a.ui.Printf("%-16s  %-10s  %-10s  %s\n", coloredName, shortUser, shortNet, p.Addr)
+			a.ui.Printf("%-16s  %-10s  %-10s  %s\n", coloredName, shortUser, shortNet, p.Address)
 		}
 		a.ui.Println()
 
@@ -80,15 +77,11 @@ func (a *App) handleCommand(line string) {
 		msg := strings.TrimSpace(strings.TrimPrefix(line, "/say"))
 		chat := proto.ChatMessage{
 			Text:      msg,
-			From:      a.Node.Name(),
+			From:      a.cfg.Name,
 			Timestamp: time.Now().Unix(),
 		}
 		body, _ := json.Marshal(chat)
-		a.Node.Broadcast(proto.Gossip{
-			ID:      p2p.NewMsgID(),
-			Channel: "global",
-			Body:    body,
-		})
+		_ = a.net.publish("global", body)
 
 	case strings.HasPrefix(line, "/add "):
 		arg := strings.TrimSpace(strings.TrimPrefix(line, "/add"))
@@ -123,7 +116,7 @@ func (a *App) handleCommand(line string) {
 	case line == "/lb":
 		// Grant-based leaderboard
 		self := a.userIDHex()
-		a.Ledger.NoteName(self, a.Node.Name())
+		a.Ledger.NoteName(self, a.cfg.Name)
 		lb := a.Ledger.Leaderboard()
 		a.ui.Println("== Leaderboard (grants) ==")
 		if len(lb) == 0 {
@@ -180,7 +173,7 @@ func (a *App) handleCommand(line string) {
 		}
 		wire := proto.QuizWire{Kind: "open", Open: &signed}
 		body, _ := json.Marshal(wire)
-		a.Node.Broadcast(proto.Gossip{ID: p2p.NewMsgID(), Channel: "quiz", Body: body})
+		_ = a.net.publish("quiz", body)
 		a.ui.Printf("[QUIZ] opened %s (%d pts, ttl=%ds): %s\n", shortID(qid), pts, ttlS, question)
 
 	case line == "/quizzes":
@@ -221,7 +214,7 @@ func (a *App) handleCommand(line string) {
 		answer := strings.TrimSpace(strings.Join(fields[1:], " "))
 		wire := proto.QuizWire{Kind: "answer", Answer: &proto.QuizAnswer{QuizID: qid, Answer: answer, Timestamp: time.Now().Unix()}}
 		body, _ := json.Marshal(wire)
-		a.Node.Broadcast(proto.Gossip{ID: p2p.NewMsgID(), Channel: "quiz", Body: body})
+		_ = a.net.publish("quiz", body)
 		a.ui.Printf("[QUIZ] answered %s\n", shortID(qid))
 
 	case strings.HasPrefix(line, "/mkchan "):
@@ -291,7 +284,7 @@ func (a *App) sendEncrypted(chName, msg string) {
 
 	plaintext, _ := json.Marshal(map[string]any{
 		"text":      msg,
-		"from":      a.Node.Name(),
+		"from":      a.cfg.Name,
 		"channel":   chName,
 		"timestamp": time.Now().Unix(),
 	})
@@ -303,14 +296,11 @@ func (a *App) sendEncrypted(chName, msg string) {
 	}
 
 	em := proto.EncryptedMessage{
+		Channel:    chName,
 		Nonce:      nonce,
 		Ciphertext: ct,
 	}
 
 	body, _ := json.Marshal(em)
-	a.Node.Broadcast(proto.Gossip{
-		ID:      p2p.NewMsgID(),
-		Channel: "enc:" + chName,
-		Body:    body,
-	})
+	_ = a.net.publish("encrypted", body)
 }

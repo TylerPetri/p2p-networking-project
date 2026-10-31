@@ -1,5 +1,9 @@
 # Phase 1 engine extraction review
 
+Historical Phase 1 record. See [Phase 2 migration](PHASE2_ENGINE_ADAPTER.md) for
+the current Park consumer boundary and API additions.
+
+
 ## Scope and outcome
 
 Based on merged main `b6cfb37`, retaining its security hardening and proprietary

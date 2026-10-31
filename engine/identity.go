@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"crypto"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
@@ -132,4 +133,15 @@ func loadIdentity(path string) (*Identity, error) {
 	copy(id.NoisePriv[:], d.NoisePrivate)
 	copy(id.NoisePub[:], noisePub)
 	return &Identity{id}, nil
+}
+
+// Public and Sign implement crypto.Signer for application records without
+// exporting private keys. Standard Ed25519 signs the supplied bytes (Hash(0)).
+// Callers own application canonicalization, domain separation and authorization.
+func (i *Identity) Public() crypto.PublicKey { return ed25519.PublicKey(i.SigningPublicKey()) }
+func (i *Identity) Sign(random io.Reader, message []byte, opts crypto.SignerOpts) ([]byte, error) {
+	if i == nil || i.id == nil {
+		return nil, errors.New("engine: invalid identity")
+	}
+	return i.id.SignPriv.Sign(random, message, opts)
 }

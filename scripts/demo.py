@@ -40,7 +40,7 @@ def main():
             raise RuntimeError(f"timed out: {description}")
 
         def launch(name, bootstrap=None):
-            # Let the OS choose a port; obtain the seed's actual port from its log.
+            # Let the OS choose a port; obtain the seed's actual port from its application banner.
             data = str(Path(tmp) / name)
             env = dict(os.environ, P2P_PARK_DATA_DIR=data)
             args = [binary, "-name", name, "-bind", "127.0.0.1:0", "-lan=false", "-debug", "-data", data]
@@ -56,13 +56,13 @@ def main():
 
         try:
             launch("seed")
-            wait_for(lambda: any("listening on " in s for s in lines["seed"]), "seed listen")
+            wait_for(lambda: any(s.startswith("Addr:") for s in lines["seed"]), "seed listen")
             with lock:
-                line = next(s for s in lines["seed"] if "listening on " in s)
-            addr = line.split("listening on ", 1)[1].split(",", 1)[0]
+                line = next(s for s in lines["seed"] if s.startswith("Addr:"))
+            addr = line.split(":", 1)[1].strip()
             alice = launch("alice", addr)
             bob = launch("bob", addr)
-            wait_for(lambda: all(any("connected to peer" in s for s in lines[n]) for n in ("alice", "bob")), "peer connections")
+            wait_for(lambda: all(any("[NET] peer connected:" in s for s in lines[n]) for n in ("alice", "bob")), "peer connections")
             alice.stdin.write("/say portfolio-demo-message\n")
             alice.stdin.flush()
             wait_for(lambda: any("portfolio-demo-message" in s for s in lines["bob"]), "Alice's gossip at Bob")

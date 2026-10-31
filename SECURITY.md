@@ -95,8 +95,8 @@ project for sensitive communication or expose it as a trusted public service.
 
 ## Engine extraction boundary
 
-`engine` uses `p2p-engine/0.1.0`, separate from the unchanged Park `0.2.0` wire
-protocol. It checks a public overlay NetworkID in Hello, exchanges admission
+`engine` uses `p2p-engine/0.1.0`, separate from the legacy Park `0.2.0` wire
+protocol. Current Park now consumes that engine through the Phase 2 adapter. It checks a public overlay NetworkID in Hello, exchanges admission
 acknowledgements, and signs the overlay and direct recipient into gossip.
 Signatures cannot be moved between overlay IDs or changed from direct messages
 into broadcasts. Empty optional fields preserve legacy Park signed bytes.
@@ -122,6 +122,23 @@ Default engine configuration enables no LAN broadcaster or implicit disk peer
 store. The game keeps its existing adapter, protocol and optional UDP discovery.
 See the [API lifecycle and limits](engine/README.md) and
 [extraction decisions](docs/ENGINE_ARCHITECTURE.md).
+
+## Park application adapter (Phase 2)
+
+Current Park consumes the public engine, using `p2p-engine/0.1.0` and namespace
+`p2p-park.0.3.0`. Earlier Park wire-version references above describe the legacy
+baseline. The [adapter review](docs/PHASE2_ENGINE_ADAPTER.md) documents migration,
+compatibility and persistence. Grant sync now uses signed, recipient-bound engine
+messages. Application replies, names and quiz recipients use verified signing
+identities, never unverified transport-ID claims. Forwarded grants/points retain
+independent signature validation and application authority assumptions.
+
+Opaque identity objects implement standard crypto.Signer for existing game record
+formats; no private key slices or raw core envelopes are exposed to Park. This is
+a trusted local signing capability, not a remote admission bypass. Optional LAN
+workers now belong to engine lifecycle and reuse existing scoped discovery checks.
+No game schema or permission policy enters the engine. Both dependency directions
+are checked in CI. Existing experimental limitations and licensing remain intact.
 
 ## Reporting vulnerabilities
 

@@ -51,10 +51,15 @@ func (n *Node) ConnectContext(ctx context.Context, addr netx.Addr) error {
 	go func() { defer n.releaseConnection(); n.runConn(conn, false, n.cfg.PeerPins[addr], ready) }()
 	select {
 	case <-dialCtx.Done():
-		return dialCtx.Err()
-	case err := <-ready:
-		return err
+	case err = <-ready:
 	}
+	// Cancellation may make setup report EOF before this waiter runs. Normalize
+	// that outcome and close explicitly: stopping AfterFunc must not suppress cleanup.
+	if contextErr := dialCtx.Err(); contextErr != nil {
+		_ = conn.Close()
+		return contextErr
+	}
+	return err
 }
 func (n *Node) DisconnectPeer(id string) error {
 	n.mu.RLock()

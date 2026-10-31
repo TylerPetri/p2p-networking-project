@@ -9,8 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"p2p-park/internal/p2p"
-	"p2p-park/internal/proto"
+	"crypto"
+	"crypto/rand"
+
+	proto "p2p-park/internal/gameproto"
 )
 
 type Open struct {
@@ -35,7 +37,7 @@ type Engine struct {
 
 	selfPeerID string
 	selfName   string
-	priv       ed25519.PrivateKey
+	priv       crypto.Signer
 	pub        ed25519.PublicKey
 
 	// opens holds public opens we've seen (including ours)
@@ -45,8 +47,13 @@ type Engine struct {
 }
 
 func NewEngine(selfName string, priv ed25519.PrivateKey, pub ed25519.PublicKey) *Engine {
+	return NewEngineWithSigner(selfName, priv, pub)
+}
+
+// NewEngineWithSigner keeps private key ownership outside game logic.
+func NewEngineWithSigner(selfName string, priv crypto.Signer, pub ed25519.PublicKey) *Engine {
 	return &Engine{
-		selfPeerID: p2p.PlayerIDFromPub(pub),
+		selfPeerID: hex.EncodeToString(pub),
 		selfName:   selfName,
 		priv:       priv,
 		pub:        pub,
@@ -70,7 +77,7 @@ func (e *Engine) CreateOpen(question, answer string, points int64, ttl time.Dura
 	if len(question) > 4096 || len(answer) > 4096 || points <= 0 || points > 1_000_000_000 {
 		return proto.QuizOpenSigned{}, "", errors.New("invalid quiz limits")
 	}
-	qid := p2p.NewMsgID()
+	qid := proto.NewID()
 	now := time.Now()
 	exp := int64(0)
 	if ttl > 0 {
@@ -90,7 +97,10 @@ func (e *Engine) CreateOpen(question, answer string, points int64, ttl time.Dura
 	if err != nil {
 		return proto.QuizOpenSigned{}, "", err
 	}
-	sig := ed25519.Sign(e.priv, data)
+	sig, err := e.priv.Sign(rand.Reader, data, crypto.Hash(0))
+	if err != nil {
+		return proto.QuizOpenSigned{}, "", err
+	}
 	signed := proto.QuizOpenSigned{Open: o, Signature: sig}
 
 	e.mu.Lock()
@@ -193,7 +203,7 @@ func (e *Engine) TryGrade(quizID, answererID, answer string) (grant proto.QuizGr
 	}
 
 	grant = proto.QuizGrant{
-		GrantID:     p2p.NewMsgID(),
+		GrantID:     proto.NewID(),
 		QuizID:      quizID,
 		GrantorID:   e.selfPeerID,
 		RecipientID: answererID,
@@ -201,7 +211,11 @@ func (e *Engine) TryGrade(quizID, answererID, answer string) (grant proto.QuizGr
 		Timestamp:   now,
 	}
 	msg, _ := proto.EncodeQuizGrantCanonical(grant)
-	grant.Signature = ed25519.Sign(e.priv, msg)
+	sig, err := e.priv.Sign(rand.Reader, msg, crypto.Hash(0))
+	if err != nil {
+		return proto.QuizGrant{}, false, true, false
+	}
+	grant.Signature = sig
 	lo.awardedTo[answererID] = true
 	return grant, true, true, false
 }
