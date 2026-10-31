@@ -86,6 +86,10 @@ impersonation), identity recreation/reconnection,
 concurrent private-file creation, corrupt/permissive-file refusal, DHT access and
 pending-RPC cancellation. A real Park app rejects an engine peer without admitting
 it. Existing game tests and signed/encrypted three-process demo remain required.
+Repeated testing also exposed shared routing-store interference in the existing
+connection-capacity fixture. That fixture now disables persistence and asserts
+that its two pending inbound clients occupy the budget before checking rejection;
+the production limit was unchanged.
 An external temporary consumer with a local go.mod replace successfully imported,
 built and started the public engine without importing internal packages.
 

@@ -136,7 +136,7 @@ func TestDiscoveryDestinationPolicyAndPins(t *testing.T) {
 
 func TestAdmissionAndShutdownResourceCleanup(t *testing.T) {
 	before := runtime.NumGoroutine()
-	n, err := NewNode(NodeConfig{Network: netx.NewTCPNetwork(), BindAddr: "127.0.0.1:0", MaxConnections: 2})
+	n, err := NewNode(NodeConfig{Network: netx.NewTCPNetwork(), BindAddr: "127.0.0.1:0", MaxConnections: 2, DisablePeerStore: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,6 +156,9 @@ func TestAdmissionAndShutdownResourceCleanup(t *testing.T) {
 	deadline := time.Now().Add(time.Second)
 	for len(n.slots) != 2 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
+	}
+	if len(n.slots) != 2 {
+		t.Fatal("two pending inbound clients did not occupy the budget")
 	}
 	extra, err := net.Dial("tcp", string(n.ListenAddr()))
 	if err != nil {
