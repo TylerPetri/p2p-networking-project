@@ -74,6 +74,10 @@ func (n *Node) establishPeer(rawConn netx.Conn, inbound bool, expected ...string
 		_ = secure.Close()
 		return nil, nil, errors.New("peer pin mismatch")
 	}
+	if len(expected) > 1 && expected[1] != "" && remoteUserID != expected[1] {
+		_ = secure.Close()
+		return nil, nil, errors.New("peer signing pin mismatch")
+	}
 	dec := newEnvelopeDecoder(secure)
 	enc := json.NewEncoder(secure)
 

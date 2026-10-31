@@ -64,6 +64,9 @@ func (n *Node) handleConn(rawConn netx.Conn, inbound bool) {
 }
 
 func (n *Node) runConn(rawConn netx.Conn, inbound bool, expected string, ready ...chan error) {
+	n.runPinnedConn(rawConn, inbound, expected, "", ready...)
+}
+func (n *Node) runPinnedConn(rawConn netx.Conn, inbound bool, expected, signingID string, ready ...chan error) {
 	notify := func(err error) {
 		if len(ready) > 0 {
 			ready[0] <- err
@@ -73,7 +76,7 @@ func (n *Node) runConn(rawConn netx.Conn, inbound bool, expected string, ready .
 	defer stopCancel()
 	// Include Noise and both Hello reads/writes, even for transports without deadlines.
 	setupTimer := time.AfterFunc(5*time.Second, func() { _ = rawConn.Close() })
-	p, secureCloser, err := n.establishPeer(rawConn, inbound, expected)
+	p, secureCloser, err := n.establishPeer(rawConn, inbound, expected, signingID)
 	setupTimer.Stop()
 	if err != nil {
 		notify(err)

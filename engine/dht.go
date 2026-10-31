@@ -18,7 +18,7 @@ type Record struct {
 }
 
 func (e *Engine) PutImmutable(ctx context.Context, value []byte, ttl time.Duration) (Key, error) {
-	finish, err := e.beginDHT(ctx)
+	finish, err := e.beginOperation(ctx)
 	if err != nil {
 		return Key{}, err
 	}
@@ -27,7 +27,7 @@ func (e *Engine) PutImmutable(ctx context.Context, value []byte, ttl time.Durati
 	return Key(k), err
 }
 func (e *Engine) PutMutable(ctx context.Context, name string, value []byte, seq uint64, ttl time.Duration) (Key, error) {
-	finish, err := e.beginDHT(ctx)
+	finish, err := e.beginOperation(ctx)
 	if err != nil {
 		return Key{}, err
 	}
@@ -36,7 +36,7 @@ func (e *Engine) PutMutable(ctx context.Context, name string, value []byte, seq 
 	return Key(k), err
 }
 func (e *Engine) Get(ctx context.Context, key Key) (Record, bool, error) {
-	finish, err := e.beginDHT(ctx)
+	finish, err := e.beginOperation(ctx)
 	if err != nil {
 		return Record{}, false, err
 	}
@@ -49,7 +49,7 @@ func (e *Engine) Get(ctx context.Context, key Key) (Record, bool, error) {
 }
 
 // Register calls under the same lock used to begin closure: no Add/Wait race.
-func (e *Engine) beginDHT(ctx context.Context) (func(), error) {
+func (e *Engine) beginOperation(ctx context.Context) (func(), error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.state == 2 {

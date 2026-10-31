@@ -13,17 +13,37 @@ var ErrPeerClosed = errors.New("p2p: peer not connected or rejected")
 // ConnectContext waits for Noise, identity, domain and admission checks. Unlike
 // the legacy ConnectTo this is not merely acknowledgement of a TCP dial.
 func (n *Node) ConnectContext(ctx context.Context, addr netx.Addr) error {
+	return n.connectPinnedContext(ctx, addr, n.cfg.PeerPins[addr], "")
+}
+
+// ConnectPinnedContext applies per-attempt pins without changing node trust or
+// discovery configuration. Signing pins are checked before peer admission.
+func (n *Node) ConnectPinnedContext(ctx context.Context, addr netx.Addr, peerID, signingID string) error {
+	if !validPeerID(peerID) || !validPeerID(signingID) {
+		return errors.New("invalid bootstrap identity")
+	}
+	if pin := n.cfg.PeerPins[addr]; pin != "" && pin != peerID {
+		return errors.New("bootstrap conflicts with configured peer pin")
+	}
+	return n.connectPinnedContext(ctx, addr, peerID, signingID)
+}
+func (n *Node) matchesPinnedPeer(addr netx.Addr, peerID, signingID string) bool {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	for _, p := range n.peers {
+		if p.addr == addr && (peerID == "" || p.id == peerID) && (signingID == "" || p.userID == signingID) {
+			return true
+		}
+	}
+	return false
+}
+func (n *Node) connectPinnedContext(ctx context.Context, addr netx.Addr, peerID, signingID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	n.mu.RLock()
-	for _, p := range n.peers {
-		if p.addr == addr && (n.cfg.PeerPins[addr] == "" || p.id == n.cfg.PeerPins[addr]) {
-			n.mu.RUnlock()
-			return nil
-		}
+	if n.matchesPinnedPeer(addr, peerID, signingID) {
+		return nil
 	}
-	n.mu.RUnlock()
 	if !n.reserveConnection() {
 		if err := n.ctx.Err(); err != nil {
 			return err
@@ -48,7 +68,7 @@ func (n *Node) ConnectContext(ctx context.Context, addr netx.Addr) error {
 	ready := make(chan error, 1)
 	abort := context.AfterFunc(dialCtx, func() { _ = conn.Close() })
 	defer abort()
-	go func() { defer n.releaseConnection(); n.runConn(conn, false, n.cfg.PeerPins[addr], ready) }()
+	go func() { defer n.releaseConnection(); n.runPinnedConn(conn, false, peerID, signingID, ready) }()
 	select {
 	case <-dialCtx.Done():
 	case err = <-ready:
@@ -58,6 +78,9 @@ func (n *Node) ConnectContext(ctx context.Context, addr netx.Addr) error {
 	if contextErr := dialCtx.Err(); contextErr != nil {
 		_ = conn.Close()
 		return contextErr
+	}
+	if errors.Is(err, ErrPeerClosed) && n.matchesPinnedPeer(addr, peerID, signingID) {
+		return nil
 	}
 	return err
 }
