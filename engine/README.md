@@ -185,3 +185,18 @@ unsigned discovery hints; use a trusted sharing channel. Endpoint authentication
 is not issuer authenticity, application authority, secrecy or NAT traversal.
 No shared password/account or browser frontend is required. The echo example is
 localhost-only and proves no Internet-wide connectivity.
+
+## Compatibility and eventual packaging
+
+The [API/version policy](../docs/API_VERSION_POLICY.md) records lifecycle,
+concurrency, error and invitation contracts. Versioned public fixture bytes are
+checked by Go and a separate Python codec at a fixed test clock. Production
+expiry checks still use the real clock. No new public API is added in Phase 4.
+A temporary independent Go consumer builds/runs with local replace in CI; no module
+has been published. See [packaging readiness](../docs/PHASE4_REVIEW.md).
+
+For authorized real-host tests, the [netcheck consumer and owner plan](../docs/CROSS_HOST_TEST_PLAN.md)
+use verified round trips and explicit address scopes. Current evidence is local;
+no LAN/WAN, real firewall/partition or NAT success is claimed. Per-link gossip
+relays can observe plaintext payloads/metadata; the engine provides no current
+opaque relay circuit or automatic NAT traversal.

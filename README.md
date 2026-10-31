@@ -250,6 +250,22 @@ go test ./internal/dht -run '^$' -fuzz '^FuzzRecordValidation$' -fuzztime=10s -p
 go test ./internal/crypto/channel -run '^$' -fuzz '^FuzzChannelDecrypt$' -fuzztime=10s -parallel=2
 ```
 
+## Phase 4 compatibility and connectivity evidence
+
+The [integration assessment](docs/PHASE4_INTEGRATION.md) explains why Phase 2/3
+are not yet both in main and gives the safe owner merge/retarget sequence.
+The [API/version policy](docs/API_VERSION_POLICY.md) separates experimental Go API,
+wire and invitation compatibility. Deterministic Go/Python invitation fixtures
+and an independently built Go consumer run in CI.
+
+For actual two-machine testing, use the [owner-run connectivity plan](docs/CROSS_HOST_TEST_PLAN.md)
+and `go build -o /tmp/p2p-netcheck ./examples/netcheck`. The diagnostic defaults
+to loopback and requires explicit authorization flags for non-loopback binding.
+Only local/loopback behavior has been verified here; genuine LAN, cross-network,
+firewall/partition and NAT tests remain NOT RUN. Local success is not Internet-wide
+reachability. [The Phase 4 review](docs/PHASE4_REVIEW.md) covers relay visibility,
+remaining limits and why independent module publication is not yet recommended.
+
 ## License
 
 Copyright © 2026 Tyler Petri. Rights to the original implementation are reserved
