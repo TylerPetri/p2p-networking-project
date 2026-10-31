@@ -172,6 +172,25 @@ operator responsibilities. See [the full invitation threat model/spec](docs/INVI
 and [verification/API assessment](docs/PHASE3_API_REVIEW.md). Local demos do not
 prove cross-host, Internet-wide or NAT connectivity.
 
+## Phase 4 verification boundary
+
+[Deterministic interoperability fixtures](engine/testdata/invitations/README.md)
+check canonical v1 bytes and typed rejection at a fixed test clock; no production
+clock override or expiry bypass is exported. A separate public-API diagnostic
+checks expected signing identities and nonce round trips, with explicit opt-in to
+non-loopback binding, bounded input/probes/lifetime and unchanged engine controls.
+Automated process tests are loopback-only. Genuine two-host LAN, different-network,
+real partition/firewall and NAT scenarios remain NOT EXECUTED in this environment.
+The [owner plan](docs/CROSS_HOST_TEST_PLAN.md) must be authorized and recorded;
+no firewall/routing changes or public development exposure were performed here.
+
+Current gossip relays decrypt each link and can observe plaintext application
+messages and metadata. Origin signatures are not confidentiality from relays.
+A future opaque relay design would need a separate threat model and would still
+expose traffic metadata. A seed is not a current public relay or NAT-traversal
+service. See [the API/readiness review](docs/PHASE4_REVIEW.md) for retained limits.
+No independent audit, formal verification or production readiness is claimed.
+
 ## Reporting vulnerabilities
 
 Do not put secrets or exploitable details in public issues. If enabled, use
