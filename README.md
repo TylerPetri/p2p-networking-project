@@ -33,8 +33,9 @@ on the application side; networking admission and resource limits stay in the en
 go run ./examples/echo
 ```
 
-This standalone example starts three loopback engine nodes and checks signed
-gossip delivery without importing game code. It creates and removes temporary
+This standalone example uses public invitation URIs to join three loopback
+engine nodes, verifies discovery and communication after bootstrap loss, and
+reconnects through another peer without importing game code. It creates and removes temporary
 identity files, closes all nodes and prints `PASS`. For configuration, API error
 and concurrency semantics, see the [API guide](engine/README.md); for the package
 boundary map, admission choices and future extraction path, see the
@@ -46,6 +47,20 @@ Park `0.2.0` peers are incompatible; there is no version negotiation. Membership
 application authorization. The engine API exposes verified messages, not raw
 control envelopes or private signing keys. This remains experimental networking,
 not a production security or enterprise authorization platform.
+
+## Public network invitations
+
+The engine can encode public bootstrap addresses and expected Noise/Ed25519 keys
+in a canonical `p2p://invite/...` URI suitable for sharing as link or QR text.
+No account or shared password is required. Invitations do not grant application
+permissions or certify their issuer; obtain them through a trusted source.
+Private/local destinations require separate receiver approval. Park behavior is
+unchanged in this phase; no QR UI, game feature or website is introduced.
+
+See the [invitation specification](docs/INVITATIONS.md) and
+[Phase 3 API/security review](docs/PHASE3_API_REVIEW.md). Numeric endpoints and
+multiple peers help bootstrap an overlay; they do not solve NAT/firewall traversal.
+The three-node demo is a localhost test, not proof of Internet-wide connectivity.
 
 ## Architecture
 
@@ -229,6 +244,7 @@ ready to discuss as an engineering experiment, not as an audited secure messenge
 Practical fuzz commands (short smoke runs, not exhaustive campaigns):
 
 ```sh
+go test ./engine -run '^$' -fuzz '^FuzzInvitationParse$' -fuzztime=10s -parallel=2
 go test ./internal/p2p -run '^$' -fuzz '^FuzzEnvelopeDecoder$' -fuzztime=10s -parallel=2
 go test ./internal/dht -run '^$' -fuzz '^FuzzRecordValidation$' -fuzztime=10s -parallel=2
 go test ./internal/crypto/channel -run '^$' -fuzz '^FuzzChannelDecrypt$' -fuzztime=10s -parallel=2

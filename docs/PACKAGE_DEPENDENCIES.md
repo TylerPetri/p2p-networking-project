@@ -1,4 +1,7 @@
-# Package dependency map (Phase 2)
+# Package dependency map (Phases 2–3)
+
+Phase 3 invitations add no project dependency edges or external libraries. See
+[the invitation/API review](PHASE3_API_REVIEW.md).
 
 Production imports measured with `go list -f`; external/standard-library imports
 are omitted. [Phase 2 review](PHASE2_ENGINE_ADAPTER.md) records the before/after.
