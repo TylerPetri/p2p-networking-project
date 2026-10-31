@@ -33,6 +33,10 @@ All nodes must use the same network ID and protocol `p2p-engine/0.1.0`.
 | `ApprovedPeers` | Map of Noise PeerID to hex Ed25519 SigningID. Both keys must be approved; empty restricted map denies all remote peers. Each endpoint applies its own policy. |
 | `MaxConnections` | Pending + established session budget; nonpositive defaults to 32. |
 | `MessageTimeout` | Deadline for a complete incoming envelope, including idle wait; nonpositive defaults to two minutes. |
+| `LANDiscovery` | Opt-in existing UDP LAN discovery/responder; false by default. Advertisements remain untrusted and scope/admission checks apply. |
+| `LANPeerStorePath` | Optional address-store path for LAN-discovered peers; empty disables that store. |
+| `Rendezvous` | Opt-in existing seed rendezvous role; false by default. |
+| `Debug`, `Logger` | Optional core diagnostics via a standard `*log.Logger`; debug false by default. |
 | `PeerStorePath` | Optional routing-peer persistence; empty disables disk peer store. Never share this path across nodes/overlays. |
 
 `GenerateIdentity` creates keys; `LoadOrCreateIdentity(path)` atomically creates a
@@ -145,3 +149,22 @@ Park's shared-key channel UI remains in the game, outside this initial API.
 See [architecture and extraction decisions](../docs/ENGINE_ARCHITECTURE.md) and
 [SECURITY.md](../SECURITY.md). This protocol is experimental and has not been
 independently security-audited.
+
+## Application signing and Park consumer
+
+`Identity` implements standard `crypto.Signer`: `Public()` returns a copied
+Ed25519 public key; `Sign(rand.Reader, canonicalBytes, crypto.Hash(0))` signs an
+application record without exposing private-key bytes. Other hash modes are
+rejected by standard Ed25519. Applications own canonicalization and authority.
+Signing is safe concurrently for immutable identities and is independent of a
+particular engine lifecycle. This local capability must not be exposed as an
+unrestricted remote signing service.
+
+Park uses this capability to preserve existing points/quiz/grant signatures and
+uses engine topics for all networking. See the [Phase 2 adapter design](../docs/PHASE2_ENGINE_ADAPTER.md).
+`EventDiscoveryError` / `Event.Error` report LAN responder startup errors without
+failing TCP startup. Optional LAN workers are joined on Close; discovery collection
+has a bounded one-second window. LAN and explicit stores retain the existing
+best-effort routing-state semantics, not identity-trust persistence. The existing
+Unix LAN implementation also applies to builds importing the engine. No Windows
+support or independently audited security is claimed.

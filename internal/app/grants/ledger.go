@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/gameproto"
 )
 
 // Award is a computed score entry.

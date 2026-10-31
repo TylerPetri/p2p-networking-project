@@ -5,8 +5,8 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"p2p-park/internal/p2p"
-	"p2p-park/internal/proto"
+	"encoding/hex"
+	proto "p2p-park/internal/gameproto"
 )
 
 func TestSignedSnapshotBindsPlayerIDToSigner(t *testing.T) {
@@ -26,7 +26,7 @@ func TestSignedSnapshotBindsPlayerIDToSigner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	forged, err := e.signSnapshot(proto.PointsSnapshot{PlayerID: p2p.PlayerIDFromPub(victim), Points: 999, Version: 1})
+	forged, err := e.signSnapshot(proto.PointsSnapshot{PlayerID: hex.EncodeToString(victim), Points: 999, Version: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

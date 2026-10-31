@@ -1,9 +1,11 @@
 package points
 
 import (
+	"crypto"
 	"crypto/ed25519"
-	"p2p-park/internal/p2p"
-	"p2p-park/internal/proto"
+	"crypto/rand"
+	"encoding/hex"
+	proto "p2p-park/internal/gameproto"
 	"sort"
 	"sync"
 )
@@ -19,7 +21,7 @@ type Engine struct {
 	selfPoints  int64
 	selfVersion uint64
 
-	selfPriv ed25519.PrivateKey
+	selfPriv crypto.Signer
 	selfPub  ed25519.PublicKey
 
 	others map[string]proto.PointsSnapshot
@@ -27,8 +29,13 @@ type Engine struct {
 
 // NewEngine initializes a points engine for a given local identity.
 func NewEngine(selfName string, priv ed25519.PrivateKey, pub ed25519.PublicKey) *Engine {
+	return NewEngineWithSigner(selfName, priv, pub)
+}
+
+// NewEngineWithSigner keeps private key ownership outside game logic.
+func NewEngineWithSigner(selfName string, priv crypto.Signer, pub ed25519.PublicKey) *Engine {
 	return &Engine{
-		selfID:   p2p.PlayerIDFromPub(pub),
+		selfID:   hex.EncodeToString(pub),
 		selfName: selfName,
 		selfPriv: priv,
 		selfPub:  pub,
@@ -42,7 +49,10 @@ func (e *Engine) signSnapshot(snap proto.PointsSnapshot) (proto.SignedPointsSnap
 	if err != nil {
 		return proto.SignedPointsSnapshot{}, err
 	}
-	sig := ed25519.Sign(e.selfPriv, data)
+	sig, err := e.selfPriv.Sign(rand.Reader, data, crypto.Hash(0))
+	if err != nil {
+		return proto.SignedPointsSnapshot{}, err
+	}
 	return proto.SignedPointsSnapshot{
 		Snapshot:  snap,
 		PubKey:    e.selfPub,
@@ -65,7 +75,7 @@ func verifySigned(s proto.SignedPointsSnapshot) bool {
 		return false
 	}
 
-	expectedID := p2p.PlayerIDFromPub(pub)
+	expectedID := hex.EncodeToString(pub)
 	return s.Snapshot.PlayerID == expectedID
 }
 

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +28,7 @@ const MaxMessageSize = 64 * 1024
 const (
 	EventPeerConnected    = "peer_connected"
 	EventPeerDisconnected = "peer_disconnected"
+	EventDiscoveryError   = "discovery_error"
 )
 
 var (
@@ -48,19 +50,24 @@ const (
 // remote peers. Empty Identity generates an ephemeral identity. No implicit disk
 // peer store or LAN broadcaster is enabled by default.
 type Config struct {
-	NetworkID      string
-	Application    string
-	Identity       *Identity
-	Bind           string
-	Name           string
-	Bootstraps     []string
-	PeerPins       map[string]string
-	DiscoveryCIDRs []string
-	Admission      Admission
-	ApprovedPeers  map[string]string
-	MaxConnections int
-	MessageTimeout time.Duration
-	PeerStorePath  string
+	NetworkID        string
+	Application      string
+	Identity         *Identity
+	Bind             string
+	Name             string
+	Bootstraps       []string
+	PeerPins         map[string]string
+	DiscoveryCIDRs   []string
+	Admission        Admission
+	ApprovedPeers    map[string]string
+	MaxConnections   int
+	MessageTimeout   time.Duration
+	PeerStorePath    string
+	LANDiscovery     bool
+	LANPeerStorePath string
+	Rendezvous       bool
+	Debug            bool
+	Logger           *log.Logger
 }
 
 // Message authenticates SigningKey, not application authority. ClaimedPeerID is
@@ -72,8 +79,9 @@ type Message struct {
 }
 type Peer struct{ ID, Name, Address, SigningID string }
 type Event struct {
-	Type string
-	Peer Peer
+	Error string
+	Type  string
+	Peer  Peer
 }
 type applicationMessage struct {
 	Topic string `json:"topic"`
@@ -81,16 +89,18 @@ type applicationMessage struct {
 }
 
 type Engine struct {
-	mu          sync.Mutex
-	state       int // new=0, running=1, closed=2; no restart of a closed instance
-	node        *p2p.Node
-	application string
-	done        chan struct{}
-	messages    chan Message
-	events      chan Event
-	wg          sync.WaitGroup
-	stopContext func() bool
-	closeErr    error
+	mu           sync.Mutex
+	state        int // new=0, running=1, closed=2; no restart of a closed instance
+	node         *p2p.Node
+	application  string
+	done         chan struct{}
+	messages     chan Message
+	events       chan Event
+	wg           sync.WaitGroup
+	stopContext  func() bool
+	closeErr     error
+	lan          bool
+	lanStorePath string
 }
 
 func NewNetworkID() (string, error) {
@@ -146,16 +156,19 @@ func New(cfg Config) (*Engine, error) {
 	for _, addr := range cfg.Bootstraps {
 		boots = append(boots, netx.Addr(addr))
 	}
-	if cfg.PeerStorePath != "" {
-		if err := os.MkdirAll(filepath.Dir(cfg.PeerStorePath), 0700); err != nil {
+	for _, path := range []string{cfg.PeerStorePath, cfg.LANPeerStorePath} {
+		if path == "" {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			return nil, err
 		}
 	}
-	n, err := p2p.NewNode(p2p.NodeConfig{Identity: id, NetworkID: cfg.NetworkID, Restricted: cfg.Admission == Restricted, ApprovedPeers: cfg.ApprovedPeers, Name: cfg.Name, Network: netx.NewTCPNetwork(), BindAddr: cfg.Bind, Bootstraps: boots, Protocol: Protocol, PeerPins: pins, DiscoveryCIDRs: cfg.DiscoveryCIDRs, MaxConnections: cfg.MaxConnections, MessageTimeout: cfg.MessageTimeout, DisablePeerStore: cfg.PeerStorePath == "", PeerStorePath: cfg.PeerStorePath})
+	n, err := p2p.NewNode(p2p.NodeConfig{IsSeed: cfg.Rendezvous, Debug: cfg.Debug, Logger: cfg.Logger, Identity: id, NetworkID: cfg.NetworkID, Restricted: cfg.Admission == Restricted, ApprovedPeers: cfg.ApprovedPeers, Name: cfg.Name, Network: netx.NewTCPNetwork(), BindAddr: cfg.Bind, Bootstraps: boots, Protocol: Protocol, PeerPins: pins, DiscoveryCIDRs: cfg.DiscoveryCIDRs, MaxConnections: cfg.MaxConnections, MessageTimeout: cfg.MessageTimeout, DisablePeerStore: cfg.PeerStorePath == "", PeerStorePath: cfg.PeerStorePath})
 	if err != nil {
 		return nil, err
 	}
-	return &Engine{node: n, application: cfg.Application, done: make(chan struct{}), messages: make(chan Message, 128), events: make(chan Event, 128)}, nil
+	return &Engine{lan: cfg.LANDiscovery, lanStorePath: cfg.LANPeerStorePath, node: n, application: cfg.Application, done: make(chan struct{}), messages: make(chan Message, 128), events: make(chan Event, 128)}, nil
 }
 
 // Start is one-shot. Its context owns the engine lifetime, including established
@@ -183,6 +196,7 @@ func (e *Engine) Start(ctx context.Context) error {
 		_ = e.Close()
 		return err
 	}
+	e.startLAN()
 	e.wg.Add(1)
 	go e.pump()
 	e.stopContext = context.AfterFunc(ctx, func() { _ = e.Close() })

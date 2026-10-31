@@ -11,7 +11,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 
 	"p2p-park/internal/app/grants"
-	"p2p-park/internal/proto"
+	proto "p2p-park/internal/gameproto"
 )
 
 const (
