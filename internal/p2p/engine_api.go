@@ -51,6 +51,9 @@ func (n *Node) ConnectContext(ctx context.Context, addr netx.Addr) error {
 	go func() { defer n.releaseConnection(); n.runConn(conn, false, n.cfg.PeerPins[addr], ready) }()
 	select {
 	case <-dialCtx.Done():
+		// Do not rely only on AfterFunc: deferred abort can stop its callback
+		// before it runs, leaving setup occupying its budget until timeout.
+		_ = conn.Close()
 		return dialCtx.Err()
 	case err := <-ready:
 		return err

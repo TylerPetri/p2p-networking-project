@@ -124,6 +124,18 @@ As before, a blocked stdin read cannot be cancelled portably; do not use Run for
 repeated embedded lifecycles—use Start/StopAll. No universal leak-free proof is
 claimed. Shared GrantStore access during closure is not an external caller API.
 
+## Cancellation finding corrected during hosted verification
+
+**Medium availability issue, fixed:** CI repetition exposed a Phase 1 cancellation race: ConnectContext could select
+caller cancellation and then its deferred AfterFunc stop could suppress the
+scheduled socket close before it ran. The stalled handshake retained its budget
+until the five-second setup watchdog instead of releasing promptly. The cancelled
+return path now explicitly closes the raw connection before returning; session
+cleanup still releases the existing shared budget. No timeout/budget was relaxed.
+The existing stalled-connect regression is repeated 100 times locally with
+GOMAXPROCS=1 and the race detector, plus 50 times in CI;
+this is a resource-cleanup fix, not a protocol or cryptographic redesign.
+
 ## Verification and limitations
 
 Environment: managed Linux x86_64, Go 1.27.3, Python 3.12.14, isolated temporary
