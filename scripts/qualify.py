@@ -39,7 +39,7 @@ def run_check(name, packages, names, env, timeout, count=1):
         if event.get("Test") in names and event.get("Action") in ("pass", "fail", "skip"):
             outcomes[event["Test"]] = event["Action"]
         message = event.get("Output", "").strip()
-        if any(marker in message for marker in ("DELIVERY ", "ROOM ", "METRICS ", "COMPAT ", "FAIL receiver-pressure")):
+        if any(marker in message for marker in ("DELIVERY ", "ROOM ", "METRICS ", "COMPAT ", "RECONNECT ", "FAIL receiver-pressure")):
             evidence.append(message)
     # A zero exit with no matched tests, or a skipped required gate, is not PASS.
     passed = code == 0 and all(outcomes.get(test) == "pass" for test in names)
@@ -50,7 +50,7 @@ def run_check(name, packages, names, env, timeout, count=1):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--gate", choices=("all", "behavior", "room", "capacity", "delivery", "media"), default="all")
+    parser.add_argument("--gate", choices=("all", "behavior", "room", "capacity", "delivery", "reconnect", "media"), default="all")
     parser.add_argument("--soak-rounds", type=int, default=3, help="capacity rounds/pressure repetitions, 1..1000; explicit long run")
     parser.add_argument("--output", type=Path, help="JSON evidence including full command logs; outside the source tree recommended")
     args = parser.parse_args()
@@ -72,6 +72,9 @@ def main():
     if selected("capacity"):
         results.append(run_check("bounded-local-churn", ["./qualification"], ["TestBoundedChurnRecovery"], env, max(90, args.soak_rounds * 2 + 30)))
         results.append(run_check("repeated-stalled-consumer", ["./engine"], ["TestSendStalledConsumerCurrentBehavior"], env, max(90, args.soak_rounds * 2 + 30), count=args.soak_rounds))
+    if selected("reconnect"):
+        results.append(run_check("concurrent-discovery-manual-join-acceptance", ["./qualification"],
+                                ["TestQualificationConcurrentDiscoveryJoinStability"], env, max(90, args.soak_rounds * 2 + 30)))
     if selected("delivery"):
         results.append(run_check("receiver-pressure-feedback-acceptance", ["./engine"],
                                 ["TestQualificationReceiverPressureFeedback"], env, 90))

@@ -55,6 +55,8 @@ python3 scripts/qualify.py --gate behavior --output /tmp/p2p-behavior.json
 python3 scripts/qualify.py --gate room --output /tmp/p2p-room.json
 # Explicit receipt/receiver-pressure acceptance requirement: currently FAIL.
 python3 scripts/qualify.py --gate delivery --output /tmp/p2p-delivery.json
+# Strict concurrent discovery/manual join settlement, no hidden retry:
+python3 scripts/qualify.py --gate reconnect --soak-rounds 100 --output /tmp/p2p-reconnect.json
 # Manual real-device/media evidence absent: NOT_RUN, exit 1.
 python3 scripts/qualify.py --gate media --output /tmp/p2p-media.json
 # Explicit longer run. Default capacity test in CI uses only 3 rounds.
@@ -156,7 +158,11 @@ while discovery established the same peer could leave a disconnected session.
 The fixture now observes discovery instead of issuing that competing dial; no
 retry is hidden inside the seed-loss assertion. Concurrent duplicate dial
 settlement and continuous liveness after Join are not newly guaranteed by this
-pass and remain a separate lifecycle qualification concern. An active authority
+pass. An explicit `--gate reconnect --soak-rounds 100` acceptance probe retains
+that competing-dial schedule and reports every failed Join, enqueue or signed
+recovery instead of retrying failures into success. Its zero-failed-trials
+requirement is stricter than the current API contract and runs outside merge CI.
+A PASS covers only the observed bounded schedule, not all interleavings. An active authority
 engine restarts from its ledger/identity; other rounds disconnect and rejoin.
 Application state must converge after every round.
 
@@ -185,7 +191,10 @@ malicious referrals and shutdown cancellation regressions remain enforced.
    idempotency/sequence rules, retry/reconciliation and stale-UI behavior. The
    model proves a pattern, not production delivery. Any engine acknowledgement
    API or wire change needs separate design/version review and adversarial tests.
-3. Build and instrument the separately scoped media consumer before executing
+3. Investigate any failing concurrent discovery/manual join acceptance trials:
+   session arbitration/liveness after simultaneous dials needs its own lifecycle
+   implementation review; the ordinary capacity test does not hide retries.
+4. Build and instrument the separately scoped media consumer before executing
    [streaming qualification](STREAMING_QUALIFICATION.md). Real-device/media rows
    remain NOT RUN; owner-reported historical multi-device connectivity is not
    playback evidence. NAT/relay, application authority and end-to-end payload
