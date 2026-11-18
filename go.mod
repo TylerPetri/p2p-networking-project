@@ -1,4 +1,4 @@
-module p2p-park
+module github.com/TylerPetri/p2p-networking-project
 
 go 1.24.1
 

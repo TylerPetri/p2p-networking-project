@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"p2p-park/internal/netx"
+	"github.com/TylerPetri/p2p-networking-project/internal/netx"
 )
 
 // ConnectTo allows manual dialing (used by discovery/bootstraps).

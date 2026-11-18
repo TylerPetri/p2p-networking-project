@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"p2p-park/internal/dht"
-	"p2p-park/internal/netx"
+	"github.com/TylerPetri/p2p-networking-project/internal/dht"
+	"github.com/TylerPetri/p2p-networking-project/internal/netx"
 )
 
 func TestDHTBootstrap_ExpandsFromOnePeer(t *testing.T) {

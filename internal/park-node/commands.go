@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"p2p-park/internal/crypto/channel"
-	proto "p2p-park/internal/gameproto"
+	"github.com/TylerPetri/p2p-networking-project/internal/crypto/channel"
+	proto "github.com/TylerPetri/p2p-networking-project/internal/gameproto"
 )
 
 func (a *App) readStdin(_ any) {

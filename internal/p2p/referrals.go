@@ -7,7 +7,7 @@ import (
 	"net/netip"
 	"strconv"
 
-	"p2p-park/internal/netx"
+	"github.com/TylerPetri/p2p-networking-project/internal/netx"
 )
 
 type referral struct {

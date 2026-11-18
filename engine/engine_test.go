@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"p2p-park/engine"
+	"github.com/TylerPetri/p2p-networking-project/engine"
 )
 
 func network(t *testing.T) string {

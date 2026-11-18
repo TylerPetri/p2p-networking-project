@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"p2p-park/internal/dht"
-	proto "p2p-park/internal/wire"
+	"github.com/TylerPetri/p2p-networking-project/internal/dht"
+	proto "github.com/TylerPetri/p2p-networking-project/internal/wire"
 )
 
 // Network is an in-process deterministic "transport" for DHT testing.
@@ -16,9 +16,9 @@ type Network struct {
 	mu    sync.RWMutex
 	nodes map[string]*Node // keyed by PeerID
 	// Simulation knobs
-	Latency   time.Duration // fixed latency per message
-	DropRate  float64       // 0..1
-	rng       *rand.Rand
+	Latency  time.Duration // fixed latency per message
+	DropRate float64       // 0..1
+	rng      *rand.Rand
 }
 
 func NewNetwork(seed int64) *Network {
@@ -73,6 +73,5 @@ func (n *Node) SendToPeer(id string, env proto.Envelope) error {
 }
 
 func (n *Node) Logf(format string, args ...any) {}
-
 
 func (n *Node) DHT() *dht.DHT { return n.dht }

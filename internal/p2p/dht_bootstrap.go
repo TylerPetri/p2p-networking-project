@@ -5,8 +5,8 @@ import (
 	"math/rand"
 	"time"
 
-	"p2p-park/internal/dht"
-	"p2p-park/internal/netx"
+	"github.com/TylerPetri/p2p-networking-project/internal/dht"
+	"github.com/TylerPetri/p2p-networking-project/internal/netx"
 )
 
 type DHTBootstrapConfig struct {

@@ -3,9 +3,9 @@ package discovery
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/TylerPetri/p2p-networking-project/internal/appdata"
 	"io"
 	"os"
-	"p2p-park/internal/appdata"
 	"sync"
 	"time"
 )

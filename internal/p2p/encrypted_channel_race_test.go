@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"p2p-park/internal/crypto/channel"
-	"p2p-park/internal/proto"
+	"github.com/TylerPetri/p2p-networking-project/internal/crypto/channel"
+	"github.com/TylerPetri/p2p-networking-project/internal/proto"
 )
 
 // drain incoming so writers don't stall if channels fill.

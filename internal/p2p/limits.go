@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	proto "github.com/TylerPetri/p2p-networking-project/internal/wire"
 	"io"
-	proto "p2p-park/internal/wire"
 	"time"
 )
 

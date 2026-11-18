@@ -1,7 +1,7 @@
 package p2p
 
 import (
-	"p2p-park/internal/netx"
+	"github.com/TylerPetri/p2p-networking-project/internal/netx"
 	"time"
 )
 

@@ -2,7 +2,7 @@ package parknode
 
 import (
 	"crypto/sha256"
-	"p2p-park/internal/crypto/channel"
+	"github.com/TylerPetri/p2p-networking-project/internal/crypto/channel"
 	"time"
 )
 

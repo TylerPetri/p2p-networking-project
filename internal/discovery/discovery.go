@@ -1,6 +1,6 @@
 package discovery
 
-import "p2p-park/internal/p2p"
+import "github.com/TylerPetri/p2p-networking-project/internal/p2p"
 
 type Strategy interface {
 	Discover(n *p2p.Node) []string // returns list of addresses to try

@@ -1,8 +1,8 @@
 package proto
 
 import (
-	"p2p-park/internal/gameproto"
-	"p2p-park/internal/wire"
+	"github.com/TylerPetri/p2p-networking-project/internal/gameproto"
+	"github.com/TylerPetri/p2p-networking-project/internal/wire"
 )
 
 // ApplicationProtocol is the legacy Park wire version retained for compatibility

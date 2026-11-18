@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"p2p-park/engine"
-	"p2p-park/internal/appdata"
-	"p2p-park/internal/crypto/channel"
-	"p2p-park/internal/telemetry"
+	"github.com/TylerPetri/p2p-networking-project/engine"
+	"github.com/TylerPetri/p2p-networking-project/internal/appdata"
+	"github.com/TylerPetri/p2p-networking-project/internal/crypto/channel"
+	"github.com/TylerPetri/p2p-networking-project/internal/telemetry"
 )
 
 type App struct {

@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"p2p-park/engine"
-	"p2p-park/internal/netx"
-	"p2p-park/internal/p2p"
-	"p2p-park/internal/wire"
+	"github.com/TylerPetri/p2p-networking-project/engine"
+	"github.com/TylerPetri/p2p-networking-project/internal/netx"
+	"github.com/TylerPetri/p2p-networking-project/internal/p2p"
+	"github.com/TylerPetri/p2p-networking-project/internal/wire"
 )
 
 // A hostile peer needs raw control-message access in this adversarial fixture;

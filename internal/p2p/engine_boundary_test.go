@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"p2p-park/internal/proto"
-	"p2p-park/internal/wire"
+	"github.com/TylerPetri/p2p-networking-project/internal/proto"
+	"github.com/TylerPetri/p2p-networking-project/internal/wire"
 )
 
 func TestEngineNetworkAndRelayedAdmissionBoundary(t *testing.T) {
