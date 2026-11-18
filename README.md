@@ -291,3 +291,20 @@ permission does not restrict rights those licenses grant. The protocol remains
 experimental and has not been independently security-audited. See the
 [custom-license review notes](THIRD_PARTY_NOTICES.md#custom-license-review-notes)
 for the points recommended for professional legal review.
+
+## Reliability qualification
+
+[Behavior tests and release gates](docs/RELIABILITY_QUALIFICATION.md) distinguish
+best-effort engine enqueue from acknowledged application actions. The new room
+fixture tests stable IDs, signing-key roles, retries, restart and state recovery;
+it is test-only, not a production delivery protocol.
+
+```sh
+python3 scripts/qualify.py --gate all --output /tmp/p2p-qualification.json
+```
+
+This explicit command currently exits nonzero: receiver-pressure feedback is
+**FAIL**, and real-device streaming is **NOT RUN**. Passing ordinary CI does not
+waive those requirements. Longer bounded churn is opt-in; see the guide and
+[future streaming matrix](docs/STREAMING_QUALIFICATION.md). No production
+readiness, independent audit, media playback or WAN qualification is claimed.

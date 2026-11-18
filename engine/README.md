@@ -37,6 +37,21 @@ pinned joining, signing-pin substitution denial, authenticated delivery and
 listener release. This is an experimental API without a stable-v1 promise.
 Technical reuse does not expand the repository's proprietary evaluation license.
 
+## Delivery qualification boundary
+
+Send success means outbound enqueue, not remote receipt. A full SDK receive
+queue can silently omit a message while the sender sees nil; the connection may
+remain usable. Publish may return nil with zero peers, and partial fan-out can
+return an error after another peer was enqueued. Disconnect after enqueue leaves
+the outcome unknown. There is no public receiver-drop counter or acknowledgement
+API. Outbound queue saturation and remote receive-queue pressure are distinct.
+
+See [reliability qualification](../docs/RELIABILITY_QUALIFICATION.md) for the
+deterministic regression and explicit failing acceptance gate. Critical
+application actions need their own stable IDs, verified authority/roles, apply
+acknowledgements, idempotency and reconciliation. The test-only room model shows
+those semantics without adding an engine delivery protocol or wire change.
+
 ## Configuration and creation
 
 `New(Config)` validates configuration, copies identity/trust inputs and allocates
