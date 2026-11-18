@@ -8,11 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net"
 	"github.com/TylerPetri/p2p-networking-project/internal/crypto/noiseconn"
 	"github.com/TylerPetri/p2p-networking-project/internal/netx"
 	proto "github.com/TylerPetri/p2p-networking-project/internal/wire"
+	"io"
+	"net"
 	"strconv"
 	"time"
 )

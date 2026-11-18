@@ -11,8 +11,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"golang.org/x/crypto/curve25519"
 	"github.com/TylerPetri/p2p-networking-project/internal/p2p"
+	"golang.org/x/crypto/curve25519"
 )
 
 // Identity owns an immutable pair of transport/signing keys. Do not share its

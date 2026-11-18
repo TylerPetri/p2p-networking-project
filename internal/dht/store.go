@@ -3,9 +3,9 @@ package dht
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/TylerPetri/p2p-networking-project/internal/appdata"
 	"io"
 	"os"
-	"github.com/TylerPetri/p2p-networking-project/internal/appdata"
 	"sort"
 	"sync"
 	"time"
