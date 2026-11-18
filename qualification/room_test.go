@@ -37,11 +37,13 @@ type roomState struct {
 	Applied map[string]applied
 }
 type request struct {
-	Kind   string
-	Action action
-	After  uint64
+	Attempt string
+	Kind    string
+	Action  action
+	After   uint64
 }
 type response struct {
+	Attempt  string
 	Kind, ID string
 	Seq      uint64
 	Value    int
@@ -134,7 +136,7 @@ func (s *roomAuthority) handle(message engine.Message) {
 		return
 	}
 	signer := hex.EncodeToString(message.SigningKey)
-	reply := response{Seq: s.state.Seq, Value: s.state.Value, ID: req.Action.ID}
+	reply := response{Attempt: req.Attempt, Seq: s.state.Seq, Value: s.state.Value, ID: req.Action.ID}
 	stage := "responded"
 	if req.Kind == "sync" {
 		if req.After > s.state.Seq {
@@ -217,6 +219,7 @@ type clientState struct {
 	Pending *action
 }
 type roomClient struct {
+	waiting               string
 	node                  *engine.Engine
 	authority, peer, path string
 	state                 clientState
@@ -233,6 +236,12 @@ func client(t *testing.T, node *engine.Engine, authority, peer, path string) *ro
 }
 func (c *roomClient) send(ctx context.Context, req request) error {
 	c.current = false
+	attempt, err := engine.NewNetworkID()
+	if err != nil {
+		return err
+	}
+	req.Attempt = attempt
+	c.waiting = attempt
 	if req.Kind == "action" {
 		c.state.Pending = &req.Action
 		if err := save(c.path, c.state); err != nil {
@@ -257,6 +266,9 @@ func (c *roomClient) receive(ctx context.Context) (response, error) {
 		var r response
 		if err := json.Unmarshal(m.Data, &r); err != nil {
 			return r, err
+		}
+		if c.waiting == "" || r.Attempt != c.waiting {
+			return r, errors.New("stale or unsolicited response attempt")
 		}
 		next := c.state
 		switch r.Kind {
@@ -295,6 +307,7 @@ func (c *roomClient) receive(ctx context.Context) (response, error) {
 			return r, err
 		}
 		c.state = next
+		c.waiting = ""
 		c.current = true
 		return r, nil
 	case <-ctx.Done():
@@ -438,7 +451,7 @@ func TestRoomRecoveryAuthorizationAndIdempotency(t *testing.T) {
 	if r := v.exchange(t, request{Kind: "sync", After: 0}); r.Kind != "snapshot" || v.state.Seq != 4 || v.state.Value != 4 || !v.current {
 		t.Fatal("snapshot recovery", r)
 	}
-	join(t, viewer, owner)
+	waitUntil(t, func() bool { return !noPeer(viewer, owner.PeerID()) && !noPeer(owner, viewer.PeerID()) })
 	// A joined viewer cannot substitute the authority of a response.
 	forged, _ := json.Marshal(response{Kind: "snapshot", Seq: 999, Value: 999})
 	if err := viewer.Send(context.Background(), owner.PeerID(), "room-response", forged); err != nil {
@@ -660,8 +673,13 @@ func TestRoomRejectsStaleOrGappedRecovery(t *testing.T) {
 		{Kind: "snapshot", Seq: 2, Value: 2},
 		{Kind: "delta", Seq: 5, Value: 5, Changes: []applied{{Seq: 5, Action: action{Value: 5}}}},
 		{Kind: "applied", ID: "old", Seq: 1, Value: 1},
+		{Attempt: "previous-process-attempt", Kind: "snapshot", Seq: 3, Value: 3},
 	} {
 		c.current = false
+		c.waiting = "current-attempt"
+		if r.Attempt == "" {
+			r.Attempt = c.waiting
+		}
 		data, _ := json.Marshal(r)
 		if err := authority.Send(context.Background(), viewer.PeerID(), "room-response", data); err != nil {
 			t.Fatal(err)
@@ -673,5 +691,5 @@ func TestRoomRejectsStaleOrGappedRecovery(t *testing.T) {
 			t.Fatal("stale/gapped state accepted", r, err, c.state)
 		}
 	}
-	t.Log("ROOM stale_snapshot=rejected sequence_gap=rejected stale_ack=requires_sync confirmed_state_unchanged=true")
+	t.Log("ROOM stale_snapshot=rejected sequence_gap=rejected stale_ack=requires_sync old_attempt_response=rejected confirmed_state_unchanged=true")
 }

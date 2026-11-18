@@ -123,7 +123,11 @@ It models one room authority, one creator signing key, and public viewers:
   acknowledgements are rejected. A stale duplicate ack requires reconciliation.
 - Restarted clients load last-confirmed sequence and pending ID but start stale.
   They reconcile a contiguous delta from their checkpoint or reload an
-  authoritative snapshot. “Current” means confirmed at the completed exchange,
+  authoritative snapshot. Each request has a fresh random correlation ID, echoed
+  in the signed response and checked against the outstanding attempt; a previous
+  process/attempt response cannot make a resumed stale cache appear current.
+  This correlation is distinct from the persisted stable action ID. “Current”
+  means confirmed at the completed exchange,
   not a lease guaranteeing no future changes or instantaneous disconnection
   detection. A real UI must invalidate/reconcile on connection and state events.
 - A real authority child process is killed after persisted apply, before ack.
@@ -145,7 +149,14 @@ join/fallback/recovery times, authoritatively applied/acknowledged actions,
 explicit bootstrap failures and resource samples. Canonical-first bootstrap is
 a TCP service deliberately returning EOF (unusable for authenticated bootstrap),
 then a healthy pinned endpoint. This is not an unreachable WAN timeout test.
-Seed loss is followed by fresh sync with a surviving peer. An active authority
+Seed loss starts only after both peer snapshots and a fresh application sync
+prove the referral-created direct path; it is followed by fresh sync with that
+surviving peer. An initial CI run exposed a fixture race: redundantly dialing
+while discovery established the same peer could leave a disconnected session.
+The fixture now observes discovery instead of issuing that competing dial; no
+retry is hidden inside the seed-loss assertion. Concurrent duplicate dial
+settlement and continuous liveness after Join are not newly guaranteed by this
+pass and remain a separate lifecycle qualification concern. An active authority
 engine restarts from its ledger/identity; other rounds disconnect and rejoin.
 Application state must converge after every round.
 

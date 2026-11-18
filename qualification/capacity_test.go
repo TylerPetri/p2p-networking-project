@@ -132,13 +132,20 @@ func TestBoundedChurnRecovery(t *testing.T) {
 	room := startRoom(t, authority, filepath.Join(dir, "room.json"), identity.SigningID(), nil, func(checkpoint) {})
 	seed := newNode(t, network, nil)
 	join(t, authority, seed)
+	waitUntil(t, func() bool { return !noPeer(seed, authority.PeerID()) })
 	initial := newNode(t, network, nil)
 	join(t, initial, seed)
-	join(t, initial, authority)
-	_ = seed.Close()
-	waitUntil(t, func() bool { return noPeer(initial, seed.PeerID()) })
-	// Loss of seed must not stop verified traffic to a surviving connected peer.
+	// Discovery is already establishing this link; do not race it with a
+	// redundant manual dial. Prove bidirectional admission and an application
+	// response before measuring loss of a different peer (the seed).
+	waitUntil(t, func() bool { return !noPeer(initial, authority.PeerID()) && !noPeer(authority, initial.PeerID()) })
 	initialClient := client(t, initial, authority.SigningID(), authority.PeerID(), filepath.Join(dir, "initial.json"))
+	if r := initialClient.exchange(t, request{Kind: "sync"}); r.Kind != "delta" {
+		t.Fatal(r)
+	}
+	_ = seed.Close()
+	waitUntil(t, func() bool { return noPeer(initial, seed.PeerID()) && noPeer(authority, seed.PeerID()) })
+	// Loss of seed must not stop verified traffic to a surviving connected peer.
 	if r := initialClient.exchange(t, request{Kind: "sync"}); r.Kind != "delta" {
 		t.Fatal(r)
 	}
