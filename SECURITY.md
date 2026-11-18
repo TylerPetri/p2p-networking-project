@@ -43,8 +43,6 @@ Local host compromise and malicious local API callers are outside these controls
 - Immutable DHT values use SHA-256 content addressing. Mutable records use
   Ed25519 signatures over key, sequence, expiry and value; the key derives from
   signing key and name. Immutable expiry/creation metadata is not hash-bound.
-  Quiz grants and points use Ed25519 signatures; bounded canonical grant IDs
-  exclude ambiguous delimiter encodings. Signatures do not establish award fairness.
 
 Park keys are generated on node startup and retained in process memory. The
 engine optionally persists Ed25519 and Noise identity keys in a permission-checked
@@ -81,16 +79,13 @@ Immutable and mutable derivations share a key namespace. Stored record types
 cannot change while retained, so a type switch cannot bypass a retained sequence
 check. This does not stop first-writer preemption: `GetValue` is untyped, and callers
 must check the record type they intended. A future typed/key-namespace change is
-outside the current protocol. Mutable rollback checks last only while retained;
-grant deduplication is
-persistent but total storage is capped.
+outside the current protocol. Mutable rollback checks last only while the record is retained.
 
 Finite budgets do not prevent denial of service: Sybil peers can occupy slots,
 fill stores/caches, consume CPU or block honest discovery. Broad CIDR approval
 allows port probes within that range. There is no Byzantine DHT quorum, newest-value
 guarantee, reliable delivery, Internet-scale DoS protection, traffic-analysis
-resistance, or independently verified security guarantee. Grant sync is a bounded
-best-effort batch, not a complete history reconciliation protocol. Do not use this
+resistance, or independently verified security guarantee. Do not use this
 project for sensitive communication or expose it as a trusted public service.
 
 ## Engine extraction boundary
@@ -119,26 +114,19 @@ plus a 64 KiB application-data cap. Bounded output streams may drop data/events;
 there is no reliable delivery. Close joins tracked work; cancellation/repeated
 lifecycle tests exercise cleanup, not a proof of no leaks on every schedule.
 Default engine configuration enables no LAN broadcaster or implicit disk peer
-store. The game keeps its existing adapter, protocol and optional UDP discovery.
+store. Park uses an application adapter and offers optional UDP discovery.
 See the [API lifecycle and limits](engine/README.md) and
 [extraction decisions](docs/ENGINE_ARCHITECTURE.md).
 
-## Park application adapter (Phase 2)
+## Park reference CLI
 
-Current Park consumes the public engine, using `p2p-engine/0.1.0` and namespace
-`p2p-park.0.3.0`. Earlier Park wire-version references above describe the legacy
-baseline. The [adapter review](docs/PHASE2_ENGINE_ADAPTER.md) documents migration,
-compatibility and persistence. Grant sync now uses signed, recipient-bound engine
-messages. Application replies, names and quiz recipients use verified signing
-identities, never unverified transport-ID claims. Forwarded grants/points retain
-independent signature validation and application authority assumptions.
+Park consumes the public engine and uses namespace `p2p-park.0.3.0` for chat.
+The displayed chat origin comes from the verified signing identity. Shared-key
+channels add payload encryption with the key-holder and replay limitations above.
 
-Opaque identity objects implement standard crypto.Signer for existing game record
-formats; no private key slices or raw core envelopes are exposed to Park. This is
-a trusted local signing capability, not a remote admission bypass. Optional LAN
-workers now belong to engine lifecycle and reuse existing scoped discovery checks.
-No game schema or permission policy enters the engine. Both dependency directions
-are checked in CI. Existing experimental limitations and licensing remain intact.
+On a public overlay, private tools need application authorization and end-to-end
+payload confidentiality for sensitive data. Namespaces scope API delivery.
+Discovery, relay and transport activity can still reveal metadata.
 
 ## Invitation bootstrap boundary (Phase 3)
 

@@ -2,10 +2,10 @@
 
 A Go peer-to-peer network where independent nodes discover one another, establish
 encrypted connections, and exchange signed gossip. Run three local processes to
-try chat, shared-key channels, signed points snapshots, quizzes and persisted grants.
+try public chat and shared-key channels. Park is a reference CLI for the engine.
 
 I built P2P-Park to explore how peer discovery, encrypted connections, gossip and
-distributed records fit together in a working Go network. The chat and quiz app
+distributed records fit together in a working Go network. The chat demo
 makes the network easy to exercise. The parts I wanted to work through were peer
 lifecycles, concurrent I/O, XOR-distance routing, signed state and what happens
 when peers send malformed data or stop responding.
@@ -24,10 +24,11 @@ The [Phase 1 review](docs/ENGINE_REVIEW.md) records the extraction; the
 The public [`engine`](engine/README.md) package lets a Go application create or
 join an overlay, persist an identity, bootstrap/discover peers, send authenticated
 messages, use validated DHT records and observe peer events. It builds on the
-existing networking implementation. P2P-Park remains the working game/CLI; no
-new game features are part of this extraction. Park now consumes the public engine through a focused application adapter.
-Game schemas, signing, permissions, encrypted channels and grant persistence stay
-on the application side; networking admission and resource limits stay in the engine.
+existing networking implementation. Park is a reference consumer of the
+public API. Its chat schemas and shared-key channels live in the application.
+The engine owns peer admission and resource limits. Public streaming and
+private tools can use the same open network while enforcing their own
+application permissions. See [release readiness](docs/RELEASE_READINESS.md).
 
 ```sh
 go run ./examples/echo
@@ -54,8 +55,7 @@ The engine can encode public bootstrap addresses and expected Noise/Ed25519 keys
 in a canonical `p2p://invite/...` URI suitable for sharing as link or QR text.
 No account or shared password is required. Invitations do not grant application
 permissions or certify their issuer; obtain them through a trusted source.
-Private/local destinations require separate receiver approval. Park behavior is
-unchanged in this phase; no QR UI, game feature or website is introduced.
+Private/local destinations require separate receiver approval. Applications can wrap bootstrap in an HTTPS join page for a browser-friendly link or QR.
 
 See the [invitation specification](docs/INVITATIONS.md) and
 [Phase 3 API/security review](docs/PHASE3_API_REVIEW.md). Numeric endpoints and
@@ -68,7 +68,7 @@ The three-node demo is a localhost test, not proof of Internet-wide connectivity
 flowchart LR
     Example[examples/echo or future application] --> Engine[Public engine API]
     Engine --> P2P
-    CLI[park-node CLI] --> Apps[Chat / points / quizzes / grants]
+    CLI[park-node CLI] --> Apps[Chat / shared-key channels]
     Apps --> Adapter[Park application adapter]
     Adapter --> Engine
     Engine --> P2P[Peer lifecycle / gossip / relay]
@@ -76,7 +76,6 @@ flowchart LR
     P2P <--> DHT[Kademlia-style routing / RPC / records]
     P2P --> Noise[Noise XX / bounded encrypted frames]
     Noise --> TCP[TCP connections]
-    Apps --> Bolt[BoltDB grant store]
 ```
 
 - `internal/netx` abstracts the transport; TCP is the supplied implementation.
@@ -87,7 +86,7 @@ flowchart LR
 - Each connection verifies its peer ID against the Noise static key. An Ed25519
   signature binds the separate signing key to that static key. This proves key
   possession, not a person's identity or trustworthiness. Keys are generated
-  on each game-node start by default. Park can accept an explicit persistent engine identity;
+  on Park startup by default. Park can accept an explicit persistent engine identity;
   neither interface provides a trusted-key directory.
   Optional outbound `-pins address=Noise-ID` checks an expected key supplied by
   the operator; it does not silently trust a key on first use.
@@ -141,7 +140,7 @@ sequenceDiagram
     Note over A,B: Relays preserve signatures; receivers check replay window
 ```
 
-Game transport keys and signing keys stay in process memory and are regenerated
+Park transport keys and signing keys stay in process memory and are regenerated
 at startup. The engine can explicitly persist these keys in a private plaintext
 identity file; it does not automatically rotate them. Channel keys are generated with `crypto/rand`, displayed only when
 explicitly creating a channel, and shared out of band. No automatic key-rotation protocol is implemented.
@@ -170,18 +169,17 @@ from the repository root (choose other ports if these are occupied):
 go build -o /tmp/park-node ./cmd/park-node
 
 # Terminal 1
-P2P_PARK_DATA_DIR=/tmp/park-demo-seed /tmp/park-node -name seed -seed -bind 127.0.0.1:43001 -lan=false -data /tmp/park-demo-seed
+/tmp/park-node -name seed -seed -bind 127.0.0.1:43001 -lan=false -data /tmp/park-demo-seed
 # Terminal 2
-P2P_PARK_DATA_DIR=/tmp/park-demo-alice /tmp/park-node -name alice -bind 127.0.0.1:43002 -lan=false -bootstrap 127.0.0.1:43001 -data /tmp/park-demo-alice
+/tmp/park-node -name alice -bind 127.0.0.1:43002 -lan=false -bootstrap 127.0.0.1:43001 -data /tmp/park-demo-alice
 # Terminal 3
-P2P_PARK_DATA_DIR=/tmp/park-demo-bob /tmp/park-node -name bob -bind 127.0.0.1:43003 -lan=false -bootstrap 127.0.0.1:43001 -data /tmp/park-demo-bob
+/tmp/park-node -name bob -bind 127.0.0.1:43003 -lan=false -bootstrap 127.0.0.1:43001 -data /tmp/park-demo-bob
 ```
 
 Enter `/peers` to inspect connections and `/say hello` on Alice to see the message
 on Bob. `/mkchan friends` creates a shared-key channel; copy its key privately to
 Bob with `/joinchan friends <hexkey>`, then `/encsay friends hello`. Use disposable
-demo keys. `/quit` or Ctrl-C exits. The environment variable isolates discovery
-state; `-data` isolates the grant database. LAN discovery is enabled by default
+demo keys. `/quit` or Ctrl-C exits. `-data` isolates peer discovery state and overrides `P2P_PARK_DATA_DIR`. LAN discovery is enabled by default
 outside this demo and advertises/responds on UDP port 42042.
 
 ## Verification
@@ -228,15 +226,13 @@ sessions and tracked workers; a custom transport must unblock on Close.
 The DHT cache holds at most 256 records / 8 MiB of accounted record data. Gossip
 replay state holds 8,192 entries over the signed five-minute window; successfully
 decrypted ciphertext replay state holds 4,096 entries for 24 hours. Caches fail
-closed when full. Application maps, grant sync and grant persistence have separate
-caps documented in the review. These are component budgets, not a hard process-RSS
+closed when full. See the security documentation for application replay limits. These are component budgets, not a hard process-RSS
 or disk-usage guarantee.
 
 An attacker can occupy capacity or exhaust a replay cache, create many identities,
 withhold records, lie about names or suggest ports inside approved ranges. Pins
 are optional and address-specific; replay caches are volatile; immutable expiry
-metadata is not hash-bound. Signed scores/grants prove who issued them, not whether
-the awards are fair. DHT immutable/mutable keys share a namespace: retained record
+metadata is not hash-bound. DHT immutable/mutable keys share a namespace: retained record
 types cannot change, but an untyped lookup still needs a caller check of its
 intended type. Use disposable data on a controlled local network. This is
 ready to discuss as an engineering experiment, not as an audited secure messenger.
@@ -252,8 +248,6 @@ go test ./internal/crypto/channel -run '^$' -fuzz '^FuzzChannelDecrypt$' -fuzzti
 
 ## Phase 4 compatibility and connectivity evidence
 
-The [integration assessment](docs/PHASE4_INTEGRATION.md) explains why Phase 2/3
-are not yet both in main and gives the safe owner merge/retarget sequence.
 The [API/version policy](docs/API_VERSION_POLICY.md) separates experimental Go API,
 wire and invitation compatibility. Deterministic Go/Python invitation fixtures
 and an independently built Go consumer run in CI.
@@ -261,9 +255,9 @@ and an independently built Go consumer run in CI.
 For actual two-machine testing, use the [owner-run connectivity plan](docs/CROSS_HOST_TEST_PLAN.md)
 and `go build -o /tmp/p2p-netcheck ./examples/netcheck`. The diagnostic defaults
 to loopback and requires explicit authorization flags for non-loopback binding.
-Only local/loopback behavior has been verified here; genuine LAN, cross-network,
-firewall/partition and NAT tests remain NOT RUN. Local success is not Internet-wide
-reachability. [The Phase 4 review](docs/PHASE4_REVIEW.md) covers relay visibility,
+Automated diagnostics in this repository exercise loopback. The maintainer
+reports successful multi-host and multi-device connectivity. See
+[release readiness](docs/RELEASE_READINESS.md) for the recorded scope. [The Phase 4 review](docs/PHASE4_REVIEW.md) covers relay visibility,
 remaining limits and why independent module publication is not yet recommended.
 
 ## License

@@ -18,7 +18,6 @@ go list -deps -f '{{if .Module}}{{.Module.Path}} {{.Module.Version}}{{end}}' ./c
 | Component | Version checked | Upstream terms / notice copies |
 | --- | --- | --- |
 | `github.com/flynn/noise` | v1.1.0 | BSD 3-Clause; Prime Directive copyright and Flynn trademark notice; [LICENSE](third_party/licenses/flynn-noise.LICENSE) |
-| `go.etcd.io/bbolt` | v1.3.10 | MIT; Ben Johnson copyright; [LICENSE](third_party/licenses/bbolt.LICENSE) |
 | `golang.org/x/crypto` | v0.45.0 | BSD 3-Clause; [LICENSE](third_party/licenses/golang-x-crypto.LICENSE), [PATENTS](third_party/licenses/golang-x-crypto.PATENTS) |
 | `golang.org/x/sys` | v0.38.0 | BSD 3-Clause; [LICENSE](third_party/licenses/golang-x-sys.LICENSE), [PATENTS](third_party/licenses/golang-x-sys.PATENTS) |
 | Go standard library/runtime | Go 1.27.3 | BSD 3-Clause; [LICENSE](third_party/licenses/go.LICENSE), [PATENTS](third_party/licenses/go.PATENTS) |

@@ -12,15 +12,12 @@ const ApplicationProtocol = "park-p2p/0.2.0"
 type MessageType = wire.MessageType
 
 const (
-	MsgHello             MessageType = "hello"
-	MsgPeerList          MessageType = "peer_list"
-	MsgGossip            MessageType = "gossip"
-	MsgIdentify          MessageType = "identify"
-	MsgNatRegister       MessageType = "nat_register"
-	MsgNatRelay          MessageType = "nat_relay"
-	MsgGrantSyncSummary  MessageType = "grant_sync_summary"
-	MsgGrantSyncRequest  MessageType = "grant_sync_request"
-	MsgGrantSyncResponse MessageType = "grant_sync_response"
+	MsgHello       MessageType = "hello"
+	MsgPeerList    MessageType = "peer_list"
+	MsgGossip      MessageType = "gossip"
+	MsgIdentify    MessageType = "identify"
+	MsgNatRegister MessageType = "nat_register"
+	MsgNatRelay    MessageType = "nat_relay"
 )
 
 type Envelope = wire.Envelope
@@ -41,15 +38,4 @@ type Identify = wire.Identify
 type NatRegister = wire.NatRegister
 type NatRelay = wire.NatRelay
 type ChatMessage = gameproto.ChatMessage
-type PointsSnapshot = gameproto.PointsSnapshot
-type SignedPointsSnapshot = gameproto.SignedPointsSnapshot
 type EncryptedMessage = gameproto.EncryptedMessage
-type GrantSyncSummary = gameproto.GrantSyncSummary
-type GrantSyncRequest = gameproto.GrantSyncRequest
-type GrantSyncResponse = gameproto.GrantSyncResponse
-type QuizWire = gameproto.QuizWire
-type QuizOpen = gameproto.QuizOpen
-type QuizOpenSigned = gameproto.QuizOpenSigned
-type QuizAnswer = gameproto.QuizAnswer
-type QuizGrant = gameproto.QuizGrant
-type QuizResult = gameproto.QuizResult

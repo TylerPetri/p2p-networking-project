@@ -22,7 +22,7 @@ func main() {
 	seed := flag.Bool("seed", false, "run as SeedNode (rendezvous/relay)")
 	bootstrapStr := flag.String("bootstrap", "", "comma-separated bootstrap addresses host:port")
 	debug := flag.Bool("debug", false, "enable debug logs")
-	dataDir := flag.String("data", "", "data directory for persistent state (default: user config dir)")
+	stateDir := flag.String("data", "", "override the directory for peer discovery state")
 	flag.Parse()
 
 	pins := make(map[string]string)
@@ -54,16 +54,16 @@ func main() {
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 
 	app, err := parknode.New(parknode.Config{
-		NetworkID:      *networkID,
-		DataDir:        *dataDir,
-		DisableLAN:     !*lan,
-		PeerPins:       pins,
-		DiscoveryCIDRs: discoveryCIDRs,
-		Name:           *name,
-		Bind:           *bind,
-		IsSeed:         *seed,
-		Bootstraps:     bootstraps,
-		Debug:          *debug,
+		NetworkID:         *networkID,
+		DiscoveryStateDir: *stateDir,
+		DisableLAN:        !*lan,
+		PeerPins:          pins,
+		DiscoveryCIDRs:    discoveryCIDRs,
+		Name:              *name,
+		Bind:              *bind,
+		IsSeed:            *seed,
+		Bootstraps:        bootstraps,
+		Debug:             *debug,
 	}, logger)
 	if err != nil {
 		log.Fatalf("create app: %v", err)

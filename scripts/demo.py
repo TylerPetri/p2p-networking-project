@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Build and exercise three localhost nodes; no LAN discovery or external seeds."""
-import os
 import re
 from pathlib import Path
 import signal
@@ -42,13 +41,12 @@ def main():
         def launch(name, bootstrap=None):
             # Let the OS choose a port; obtain the seed's actual port from its application banner.
             data = str(Path(tmp) / name)
-            env = dict(os.environ, P2P_PARK_DATA_DIR=data)
             args = [binary, "-name", name, "-bind", "127.0.0.1:0", "-lan=false", "-debug", "-data", data]
             if bootstrap:
                 args += ["-bootstrap", bootstrap]
             else:
                 args += ["-seed"]
-            p = subprocess.Popen(args, cwd=ROOT, env=env, stdin=subprocess.PIPE,
+            p = subprocess.Popen(args, cwd=ROOT, stdin=subprocess.PIPE,
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
             processes.append(p)
             threading.Thread(target=collect, args=(name, p), daemon=True).start()
