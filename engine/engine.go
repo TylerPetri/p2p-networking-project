@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
-	"p2p-park/internal/netx"
-	"p2p-park/internal/p2p"
-	"p2p-park/internal/wire"
+	"github.com/TylerPetri/p2p-networking-project/internal/netx"
+	"github.com/TylerPetri/p2p-networking-project/internal/p2p"
+	"github.com/TylerPetri/p2p-networking-project/internal/wire"
 )
 
 const Protocol = "p2p-engine/0.1.0"

@@ -2,7 +2,7 @@ package parknode
 
 import (
 	"context"
-	"p2p-park/engine"
+	"github.com/TylerPetri/p2p-networking-project/engine"
 )
 
 // parkNetwork is the application's only transport adapter. It handles application

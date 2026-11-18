@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"p2p-park/internal/proto"
+	"github.com/TylerPetri/p2p-networking-project/internal/proto"
 )
 
 func TestStoreQuotasAndReplacementAccounting(t *testing.T) {

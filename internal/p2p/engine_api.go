@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"p2p-park/internal/netx"
-	proto "p2p-park/internal/wire"
+	"github.com/TylerPetri/p2p-networking-project/internal/netx"
+	proto "github.com/TylerPetri/p2p-networking-project/internal/wire"
 )
 
 var ErrPeerClosed = errors.New("p2p: peer not connected or rejected")

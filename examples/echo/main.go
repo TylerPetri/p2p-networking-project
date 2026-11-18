@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"p2p-park/engine"
+	"github.com/TylerPetri/p2p-networking-project/engine"
 )
 
 func run() error {

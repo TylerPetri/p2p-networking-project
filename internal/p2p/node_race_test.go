@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"p2p-park/internal/proto"
+	"github.com/TylerPetri/p2p-networking-project/internal/proto"
 )
 
 // TestGossipRaceHarness is a small scenario designed to exercise concurrency

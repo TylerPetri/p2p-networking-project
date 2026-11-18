@@ -1,6 +1,6 @@
 package parknode
 
-import "p2p-park/engine"
+import "github.com/TylerPetri/p2p-networking-project/engine"
 
 type Config struct {
 	NetworkID     string

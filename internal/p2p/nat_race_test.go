@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"p2p-park/internal/proto"
+	"github.com/TylerPetri/p2p-networking-project/internal/proto"
 )
 
 // Wait until seed.natByUserID has at least `want` entries.

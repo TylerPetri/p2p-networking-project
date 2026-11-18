@@ -19,6 +19,22 @@ the prior portfolio merge assessment, compatibility and remaining limitations.
 The [Phase 1 review](docs/ENGINE_REVIEW.md) records the extraction; the
 [Phase 2 adapter review](docs/PHASE2_ENGINE_ADAPTER.md) describes Park as a consumer.
 
+## SDK preview
+
+The canonical import is `github.com/TylerPetri/p2p-networking-project/engine`.
+From your own Go module, run:
+
+```sh
+go get github.com/TylerPetri/p2p-networking-project/engine@FULL_REVIEWED_COMMIT
+```
+
+Replace the placeholder with the reviewed pushed commit; a preview tag will be
+cut only with owner approval. Go 1.24.1 is the minimum. Linux and macOS are the
+preview targets; native Windows is unsupported (use Linux in WSL2). See the
+[SDK guide](engine/README.md) and [release/verification checklist](docs/SDK_PREVIEW.md)
+for install commands, actual CI evidence and the proposed `v0.1.0-preview.1` tag.
+The existing limited evaluation license remains in effect.
+
 ## Application-independent engine and Park consumer
 
 The public [`engine`](engine/README.md) package lets a Go application create or
@@ -258,7 +274,7 @@ to loopback and requires explicit authorization flags for non-loopback binding.
 Automated diagnostics in this repository exercise loopback. The maintainer
 reports successful multi-host and multi-device connectivity. See
 [release readiness](docs/RELEASE_READINESS.md) for the recorded scope. [The Phase 4 review](docs/PHASE4_REVIEW.md) covers relay visibility,
-remaining limits and why independent module publication is not yet recommended.
+remaining limits. The current [SDK preview checklist](docs/SDK_PREVIEW.md) supersedes its historical packaging assessment; no separate repository or module is created.
 
 ## License
 

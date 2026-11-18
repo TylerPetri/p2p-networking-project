@@ -54,5 +54,26 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
-      - run: go test -count=1 ./engine ./examples/...
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+      - run: go test -race -count=1 ./...
+      - run: python3 scripts/check_engine_boundary.py
+      - run: python3 scripts/check_invitation_vectors.py
       - run: python3 scripts/check_external_consumer.py
+      - run: go run ./examples/echo
+      - run: python3 scripts/demo.py
+  sdk-remote:
+    # Only resolve commits actually pushed to the canonical repository.
+    if: github.event_name == 'push' && github.repository == 'TylerPetri/p2p-networking-project'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.1'
+      - run: python3 scripts/check_external_consumer.py --version "$GITHUB_SHA"

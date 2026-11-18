@@ -2,8 +2,8 @@ package p2p
 
 import (
 	"context"
-	"p2p-park/internal/dht"
-	"p2p-park/internal/wire"
+	"github.com/TylerPetri/p2p-networking-project/internal/dht"
+	"github.com/TylerPetri/p2p-networking-project/internal/wire"
 	"time"
 )
 
