@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"p2p-park/internal/dht"
-	proto "p2p-park/internal/wire"
+	"github.com/TylerPetri/p2p-networking-project/internal/dht"
+	proto "github.com/TylerPetri/p2p-networking-project/internal/wire"
 )
 
 // Network is an in-process deterministic "transport" for DHT testing.

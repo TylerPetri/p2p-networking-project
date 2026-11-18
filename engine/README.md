@@ -1,14 +1,40 @@
 # Experimental networking engine API
 
-Import `p2p-park/engine` from the existing Go module. Start with
+Import `github.com/TylerPetri/p2p-networking-project/engine` from the existing Go module. Start with
 [`examples/echo`](../examples/echo/main.go): `go run ./examples/echo` creates three
 loopback nodes, persists disposable identities, joins through public invitations, verifies peer discovery, and exchanges
 authenticated messages after bootstrap loss and fallback reconnection. It closes all nodes and removes its
 state. No game packages, server, LAN broadcast or public bootstrap are required.
 
-For an external local consumer, use `require p2p-park v0.0.0` and
-`replace p2p-park => /absolute/path/to/checkout` in its go.mod. No separate module
-is published. This is an experimental API without a stable-version promise.
+The canonical module is `github.com/TylerPetri/p2p-networking-project`; the public
+SDK package is `github.com/TylerPetri/p2p-networking-project/engine`. From a fresh
+consumer module, before a tag exists, select the reviewed pushed commit:
+
+```sh
+go mod init example.com/my-consumer
+go get github.com/TylerPetri/p2p-networking-project/engine@FULL_REVIEWED_COMMIT
+```
+
+Import only `engine`; networking implementation packages are internal. Park is a
+small optional reference CLI, installed separately:
+
+```sh
+go install github.com/TylerPetri/p2p-networking-project/cmd/park-node@FULL_REVIEWED_COMMIT
+```
+
+Replace the commit placeholder with the approved SHA. After an owner-approved
+preview tag exists, use `@v0.1.0-preview.1` in both commands; this document does
+not assert that tag exists. Do not use `@latest` to select untagged SDK work.
+Go 1.24.1 is the declared minimum; the verification matrix covers Linux and macOS
+with minimum/current toolchains. Native Windows is unsupported; WSL2 runs the
+Linux build. See the [preview release checklist](../docs/SDK_PREVIEW.md) for actual
+evidence, platform limits, clean remote checks and post-tag verification.
+
+For local development only, a consumer can use a `replace` to its checkout.
+`scripts/check_external_consumer.py` checks that mode; `--version COMMIT_OR_TAG`
+uses a new module cache with remote resolution and **no replace**. Both exercise
+pinned joining, signing-pin substitution denial, authenticated delivery and
+listener release. This is an experimental API without a stable-v1 promise.
 Technical reuse does not expand the repository's proprietary evaluation license.
 
 ## Configuration and creation

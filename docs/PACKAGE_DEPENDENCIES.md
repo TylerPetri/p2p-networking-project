@@ -15,11 +15,9 @@ are omitted. [Phase 2 review](PHASE2_ENGINE_ADAPTER.md) records the before/after
 | `internal/wire` |  |
 | `internal/proto` | `internal/gameproto`, `internal/wire` |
 | `internal/gameproto` |  |
-| `internal/park-node` | `engine`, `internal/app/grants`, `internal/app/points`, `internal/app/quiz`, `internal/appdata`, `internal/crypto/channel`, `internal/gameproto`, `internal/paths`, `internal/storage/grantsbolt`, `internal/telemetry`, `internal/uiutil` |
+| `internal/park-node` | `engine`, `internal/appdata`, `internal/crypto/channel`, `internal/gameproto`, `internal/telemetry`, `internal/uiutil` |
 | `internal/discovery` | `internal/appdata`, `internal/netx`, `internal/p2p` |
 | `internal/bootstrap` | `internal/discovery`, `internal/netx`, `internal/p2p` |
-| `internal/app/points` | `internal/gameproto` |
-| `internal/app/quiz` | `internal/gameproto` |
 | `cmd/park-node` | `internal/park-node` |
 | `examples/echo` | `engine` |
 | `examples/netcheck` | `engine` |
@@ -40,3 +38,7 @@ closure stops at `engine` and rejects all other routes to networking internals.
 No separate module/repository is needed to prove this boundary. A future extraction
 can move the public package and its generic internal closure together, with an
 explicit import-path/API migration plan; no module is published in this phase.
+
+SDK preview: all project import paths are rooted at `github.com/TylerPetri/p2p-networking-project`.
+The root module contains the public `engine` package; no nested module is created.
+The Park scoring/grant/BoltDB cleanup is reviewed separately in PR #8.

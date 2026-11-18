@@ -30,10 +30,12 @@ Record future runs using the [cross-host results template](CROSS_HOST_RESULTS_TE
 
 ## Release milestones
 
-1. **Go SDK preview.** Decide the canonical import path, minimum supported Go
-   version and supported platforms. Verify a clean external module can install a
-   tagged build and run the echo example. Publish the API and wire compatibility
-   policy alongside it.
+1. **Go SDK preview.** Canonical module: `github.com/TylerPetri/p2p-networking-project`;
+   public package: `engine`; minimum Go 1.24.1; target platforms Linux and macOS.
+   Follow [SDK_PREVIEW.md](SDK_PREVIEW.md) for clean pre-tag remote resolution,
+   actual CI evidence and separately approved post-tag verification. No tag exists
+   merely because a candidate commit resolves. Wire/invitation compatibility is
+   preserved; [API_VERSION_POLICY.md](API_VERSION_POLICY.md) defines v0 scope.
 2. **Public overlay beta.** Measure connect and join latency, reconnect behavior,
    steady-state resources and behavior under load. Use a reproducible matrix
    covering seed loss, mixed network paths and constrained peers. Record connection

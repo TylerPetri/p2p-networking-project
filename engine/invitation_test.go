@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"p2p-park/engine"
+	"github.com/TylerPetri/p2p-networking-project/engine"
 )
 
 var loopbackInvites = engine.JoinOptions{AllowedCIDRs: []string{"127.0.0.1/32"}}

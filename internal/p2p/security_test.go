@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"p2p-park/internal/crypto/noiseconn"
-	"p2p-park/internal/netx"
-	"p2p-park/internal/proto"
+	"github.com/TylerPetri/p2p-networking-project/internal/crypto/noiseconn"
+	"github.com/TylerPetri/p2p-networking-project/internal/netx"
+	"github.com/TylerPetri/p2p-networking-project/internal/proto"
 )
 
 type pipeConn struct{ net.Conn }

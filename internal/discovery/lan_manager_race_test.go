@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"p2p-park/internal/netx"
-	"p2p-park/internal/p2p"
+	"github.com/TylerPetri/p2p-networking-project/internal/netx"
+	"github.com/TylerPetri/p2p-networking-project/internal/p2p"
 )
 
 // fakeLAN simulates LAN broadcast by sharing addresses in memory.

@@ -1,16 +1,18 @@
 # Experimental API and compatibility policy
 
-The public `engine` API is approaching a separable library boundary, not a stable
-published module. Park, echo, the diagnostic consumer and a temporary external Go
-module consume it without networking internals. No new public API is added in
-Phase 4. Clock seams for deterministic fixtures are **private**; production parse
+The public `engine` API is an experimental SDK preview boundary, not a stable-v1
+contract. The module is `github.com/TylerPetri/p2p-networking-project`; `engine`
+remains its public package. No separate engine module or repository is created.
+Park, echo, the diagnostic consumer and a temporary external Go module consume
+it without networking internals. No new public API is added by the SDK path
+migration. Clock seams for deterministic fixtures are **private**; production parse
 and encode still use the real clock and enforce expiry.
 
 ## Keep these versions distinct
 
 | Surface | Current contract | Change policy |
 | --- | --- | --- |
-| Go API/module | Local `p2p-park/engine`, unpublished | Avoid unnecessary signature changes. Record source/behavior changes and consumer migration before publishing; no stable semver promise yet. |
+| Go API/module | `github.com/TylerPetri/p2p-networking-project/engine`; proposed module tag `v0.1.0-preview.1` | Experimental v0 prerelease. Pin a commit/version; changes may break source or behavior, with migration notes. No stable-v1 promise. |
 | Core wire | `p2p-engine/0.1.0` | Exact Hello version required. No negotiation/rolling-upgrade guarantee. Changes to authenticated framing/handshake semantics require explicit version review and adversarial compatibility tests. |
 | Invitation | Canonical v1 | Preserve committed canonical byte fixtures. Security-relevant extension fields require an explicit new version; old readers reject unknown fields/versions. |
 | Application schema | Park `p2p-park.0.3.0`, echo, netcheck | Owned by the application. Joining an overlay does not negotiate application behavior or grant permissions. |
@@ -87,35 +89,32 @@ IP-policy registry/update. Add cases with any intentional format/policy change.
 Do not regenerate expected bytes using the implementation under test just to
 make a failing vector pass.
 
-## Independent packaging assessment
+## SDK preview and later packaging
 
-**Structural assessment: approaching extraction readiness. Publication: NO-GO
-for this pass.** The engine closure excludes game schemas/storage; the game graph
-stops at engine. A temporary external module with local replace builds and runs
-under the race detector in CI. No nested/published engine module is created.
+The module path migrates from the former local `p2p-park` module to
+`github.com/TylerPetri/p2p-networking-project`. Consumers must update imports;
+no compatibility alias is supplied. Exported API signatures and protocol behavior
+are unchanged. Existing `p2p-park/...` cryptographic domain separators and Park's
+application namespace intentionally remain unchanged: they are not Go imports.
+Core wire `p2p-engine/0.1.0`, strict canonical invitation v1 and identity-file v1
+retain their existing contracts. The Go preview tag does not negotiate wire
+versions or grant application authority.
 
-Before a separately authorized extraction:
+Before the first tag, verify the exact pushed commit without a local replacement.
+After an explicitly approved tag, verify that tag independently; pre-tag commit
+resolution is not post-tag evidence. See [SDK_PREVIEW.md](SDK_PREVIEW.md) for the
+commands, supported-platform scope and release gates. No tag is cut by this work.
 
-1. Complete the reviewed Git integration sequence; main must represent the tested
-   API and adapter before selecting a release/tag.
-2. Choose the canonical hosted module/import path and experimental version policy.
-   Current `p2p-park` consumers use local replace; changing imports is an explicit
-   migration, not a transparent `go get` publication.
-3. Decide support for the public DTOs, error categories and canonical v1 bytes.
-   Keep Clock helpers private. Expand API only for demonstrated consumer needs.
-4. Run declared minimum Go 1.24.1 and selected current toolchains/OS matrices.
-   Current evidence is Linux/amd64, Go 1.27.3. Existing Unix LAN socket imports
-   prevent claiming Windows support even when optional LAN discovery is off.
-5. Keep identity/peer-state path semantics, bounded streams, single-use lifecycle,
-   diagnostics and DHT limitations explicit. Evaluate source-compatible remedies
-   for error specificity/event observability only when a consumer needs them.
-6. Preserve required third-party notices and obtain the owner's distribution/license
-   decision if publication rights change. This pass leaves reserved rights intact;
-   reusable architecture is not a general commercial deployment grant.
-7. Finish the owner-run connectivity matrix before claiming LAN/WAN reachability.
-   Lack of NAT traversal need not be hidden by packaging an experimental library.
+The minimum is Go 1.24.1, enforced with `GOTOOLCHAIN=local` in compatibility jobs
+so a hidden toolchain upgrade cannot turn a minimum-version failure into a pass.
+Linux and macOS run ordinary/race tests, vet, boundary/vector checks, external
+consumer and both demos. Native Windows remains unsupported by Unix LAN imports;
+WSL2 is Linux, not evidence for a native Windows build. Record actual CI status
+separately from intended support. Historical Phase 4 evidence remains historical.
 
-Moving the public package plus its generic internal dependency closure can later
-preserve encapsulation. Do not copy game packages or create a second networking
-implementation. No separate repository, module publication, license change or
-production-readiness claim is authorized by this assessment.
+Keep bounded streams, single-use lifecycle, best-effort delivery, DHT authority
+and plaintext identity-file limits explicit. API error categories and event
+observability are not expanded speculatively. A later repository extraction needs
+its own import-path and migration decision; this root module already allows an
+external consumer to import only the public engine. The current license and
+third-party notices remain in effect; tagging does not grant additional rights.

@@ -1,6 +1,6 @@
 package proto
 
-import "p2p-park/internal/wire"
+import "github.com/TylerPetri/p2p-networking-project/internal/wire"
 
 const MsgDHT = wire.MsgDHT
 

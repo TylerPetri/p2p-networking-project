@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	parknode "p2p-park/internal/park-node"
+	parknode "github.com/TylerPetri/p2p-networking-project/internal/park-node"
 )
 
 func main() {

@@ -1,8 +1,8 @@
 package parknode
 
 import (
-	"p2p-park/engine"
-	"p2p-park/internal/uiutil"
+	"github.com/TylerPetri/p2p-networking-project/engine"
+	"github.com/TylerPetri/p2p-networking-project/internal/uiutil"
 )
 
 func shortID(id string) string                { return uiutil.ShortID(id) }

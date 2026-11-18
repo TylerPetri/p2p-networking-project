@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"p2p-park/internal/crypto/noiseconn"
-	"p2p-park/internal/netx"
-	proto "p2p-park/internal/wire"
+	"github.com/TylerPetri/p2p-networking-project/internal/crypto/noiseconn"
+	"github.com/TylerPetri/p2p-networking-project/internal/netx"
+	proto "github.com/TylerPetri/p2p-networking-project/internal/wire"
 	"strconv"
 	"time"
 )

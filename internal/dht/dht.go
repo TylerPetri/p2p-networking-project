@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	proto "p2p-park/internal/wire"
+	proto "github.com/TylerPetri/p2p-networking-project/internal/wire"
 )
 
 type Sender interface {

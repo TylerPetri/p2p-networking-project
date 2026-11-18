@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"p2p-park/internal/appdata"
+	"github.com/TylerPetri/p2p-networking-project/internal/appdata"
 	"sort"
 	"sync"
 	"time"
