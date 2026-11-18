@@ -162,7 +162,11 @@ pass. An explicit `--gate reconnect --soak-rounds 100` acceptance probe retains
 that competing-dial schedule and reports every failed Join, enqueue or signed
 recovery instead of retrying failures into success. Its zero-failed-trials
 requirement is stricter than the current API contract and runs outside merge CI.
-A PASS covers only the observed bounded schedule, not all interleavings. An active authority
+A PASS covers only the observed bounded schedule, not all interleavings. The
+existing triangle gossip/DHT setup helper also forms a settled star before
+closing the mesh through discovery, following an observed minimum-Go triangle
+setup failure. Its original delivery/deduplication assertions remain intact;
+competing manual/discovery dialing is tested in the explicit acceptance probe. An active authority
 engine restarts from its ledger/identity; other rounds disconnect and rejoin.
 Application state must converge after every round.
 

@@ -86,12 +86,32 @@ func connect(t *testing.T, from, to *Node) {
 	}
 }
 
-// connectTriangle connects b->a, c->b, a->c and waits for each to have 2 peers.
+// connectTriangle builds a settled star and lets peer-list discovery close the
+// triangle. An extra manual closing-edge dial would race discovery and test
+// duplicate-session arbitration instead of the caller's gossip/DHT assertions.
 func connectTriangle(t *testing.T, a, b, c *Node) {
 	t.Helper()
 	connect(t, b, a)
-	connect(t, c, b)
-	connect(t, a, c)
+	deadline := time.NewTimer(3 * time.Second)
+	defer deadline.Stop()
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	for !a.hasPeer(b.ID()) || !b.hasPeer(a.ID()) {
+		select {
+		case <-tick.C:
+		case <-deadline.C:
+			t.Fatal("initial triangle edge did not settle")
+		}
+	}
+	// Existing RPCs provide a FIFO startup barrier. The first round trip proves
+	// read loops have started (and enqueued their initial peer lists); the
+	// second proves both initial lists were processed before adding C.
+	for i := 0; i < 2; i++ {
+		if _, err := a.dht.QueryPing(a, b.ID(), 3*time.Second); err != nil {
+			t.Fatal("triangle startup barrier", err)
+		}
+	}
+	connect(t, c, a)
 
 	waitPeers(t, a, 2, 3*time.Second)
 	waitPeers(t, b, 2, 3*time.Second)
