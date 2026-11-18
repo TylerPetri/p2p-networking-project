@@ -37,3 +37,22 @@ jobs:
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.24.3
           gitleaks git --log-opts='--all --full-history' --redact .
+  sdk-compatibility:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go: ['1.24.1', '1.27.x']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - run: go test -count=1 ./engine ./examples/...
+      - run: python3 scripts/check_external_consumer.py

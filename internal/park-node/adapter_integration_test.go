@@ -2,10 +2,6 @@ package parknode
 
 import (
 	"context"
-	"crypto"
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -51,7 +47,7 @@ func eventually(t *testing.T, f func() bool) {
 }
 func game(t *testing.T, edit func(*Config)) (*App, *recordingPrinter) {
 	t.Helper()
-	cfg := Config{Name: "player", Bind: "127.0.0.1:0", DataDir: t.TempDir(), DiscoveryStateDir: t.TempDir(), DisableLAN: true}
+	cfg := Config{Name: "player", Bind: "127.0.0.1:0", DiscoveryStateDir: t.TempDir(), DisableLAN: true}
 	if edit != nil {
 		edit(&cfg)
 	}
@@ -83,95 +79,32 @@ func join(t *testing.T, a, b *App) {
 		return false
 	})
 }
-func score(a *App, id string) int64 {
-	for _, s := range a.Points.All() {
-		if s.PlayerID == id {
-			return s.Points
-		}
-	}
-	return -1
-}
-
-func TestParkEngineChatPointsQuizAndGrantSync(t *testing.T) {
+func TestParkEngineChat(t *testing.T) {
 	a, _ := game(t, func(c *Config) { c.Name = "alice" })
 	b, bui := game(t, func(c *Config) { c.Name = "bob" })
 	join(t, b, a)
 	a.handleCommand("/say authenticated-chat")
 	eventually(t, func() bool { return strings.Contains(bui.text(), "alice: authenticated-chat") })
-	a.handleCommand("/add 17")
-	eventually(t, func() bool { return score(b, a.userIDHex()) == 17 })
-	a.handleCommand("/quizask 5 60 What is two plus two? | four")
-	eventually(t, func() bool { return len(b.Quiz.ListOpen()) == 1 })
-	qid := b.Quiz.ListOpen()[0].QuizID
-	b.handleCommand("/quizanswer " + qid + " four")
-	eventually(t, func() bool { return b.Ledger.Total(b.userIDHex()) == 5 && a.Ledger.Total(b.userIDHex()) == 5 })
-	// Late node obtains grants through the signed, recipient-bound sync topics.
-	c, _ := game(t, nil)
-	join(t, c, a)
-	eventually(t, func() bool { return c.Ledger.Total(b.userIDHex()) == 5 })
-	// Repeated application messages do not award again.
-	b.handleCommand("/quizanswer " + qid + " four")
-	time.Sleep(30 * time.Millisecond)
-	if b.Ledger.Total(b.userIDHex()) != 5 {
-		t.Fatal("duplicate award")
-	}
-	// Stop the late node and reopen its unchanged BoltDB with the same identity.
-	c.StopAll()
-	cfg := c.cfg
-	cfg.Identity = c.identity
-	reloaded, err := New(cfg, log.New(io.Discard, "", 0))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer reloaded.StopAll()
-	if reloaded.Ledger.Total(b.userIDHex()) != 5 {
-		t.Fatal("persisted grants lost")
-	}
-	if err := reloaded.Start(); err != nil {
-		t.Fatal(err)
-	}
 }
 
-func TestParkIdentitySubstitutionAndAuthorization(t *testing.T) {
+func TestParkChatUsesVerifiedSigner(t *testing.T) {
 	victim, _ := game(t, func(c *Config) { c.Name = "victim" })
 	attacker, _ := game(t, func(c *Config) { c.Name = "attacker" })
 	receiver, ui := game(t, nil)
 	join(t, victim, receiver)
 	join(t, attacker, receiver)
 	// The payload's display label cannot substitute the authenticated signer.
-	attacker.net.broadcast("global", proto.ChatMessage{From: "victim", Text: "spoof-name", Timestamp: time.Now().Unix()})
+	body, err := json.Marshal(proto.ChatMessage{From: "victim", Text: "spoof-name", Timestamp: time.Now().Unix()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := attacker.net.publish("global", body); err != nil {
+		t.Fatal(err)
+	}
 	eventually(t, func() bool { return strings.Contains(ui.text(), "attacker: spoof-name") })
 	if strings.Contains(ui.text(), "victim: spoof-name") {
 		t.Fatal("trusted payload name")
 	}
-	victim.handleCommand("/quizask 9 60 Question | answer")
-	eventually(t, func() bool { return len(receiver.Quiz.ListOpen()) == 1 })
-	qid := receiver.Quiz.ListOpen()[0].QuizID
-	// A different engine signer cannot author a creator-only result.
-	attacker.net.broadcast("quiz", proto.QuizWire{Kind: "result", Result: &proto.QuizResult{QuizID: qid, PlayerID: receiver.userIDHex(), Correct: true, Delta: 999}})
-	forged := proto.QuizGrant{GrantID: proto.NewID(), QuizID: qid, GrantorID: victim.userIDHex(), RecipientID: receiver.userIDHex(), Points: 999, Timestamp: time.Now().Unix()}
-	bytes, _ := proto.EncodeQuizGrantCanonical(forged)
-	forged.Signature, _ = attacker.identity.Sign(rand.Reader, bytes, crypto.Hash(0))
-	attacker.net.broadcast("grants.response", proto.GrantSyncResponse{Grants: []proto.QuizGrant{forged}})
-	time.Sleep(100 * time.Millisecond)
-	if strings.Contains(ui.text(), "correct! +999") || receiver.Ledger.Total(receiver.userIDHex()) != 0 {
-		t.Fatal("accepted substituted identity")
-	}
-	spoof := proto.SignedPointsSnapshot{Snapshot: proto.PointsSnapshot{PlayerID: victim.userIDHex(), Name: "victim", Points: 123456, Version: 999}, PubKey: attacker.identity.SigningPublicKey()}
-	snapshotBytes, _ := proto.EncodeSnapshotCanonical(spoof.Snapshot)
-	spoof.Signature, _ = attacker.identity.Sign(rand.Reader, snapshotBytes, crypto.Hash(0))
-	attacker.net.broadcast("points", spoof)
-	time.Sleep(50 * time.Millisecond)
-	if score(receiver, victim.userIDHex()) == 123456 {
-		t.Fatal("accepted substituted points identity")
-	}
-	// Valid independent grant records can be forwarded, but forged signatures cannot.
-	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	forged.GrantorID = hex.EncodeToString(pub)
-	bytes, _ = proto.EncodeQuizGrantCanonical(forged)
-	forged.Signature = ed25519.Sign(priv, bytes)
-	attacker.net.broadcast("grants.response", proto.GrantSyncResponse{Grants: []proto.QuizGrant{forged}})
-	eventually(t, func() bool { return receiver.Ledger.Total(receiver.userIDHex()) == 999 })
 }
 
 func TestParkMembershipIsolationAndConcurrentLifecycle(t *testing.T) {
@@ -179,7 +112,7 @@ func TestParkMembershipIsolationAndConcurrentLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restricted, _ := game(t, func(c *Config) {
+	restricted, ui := game(t, func(c *Config) {
 		c.Admission = engine.Restricted
 		c.ApprovedPeers = map[string]string{approved.PeerID(): approved.SigningID()}
 	})
@@ -199,10 +132,10 @@ func TestParkMembershipIsolationAndConcurrentLifecycle(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
-		go func() { defer wg.Done(); member.handleCommand("/add 1"); _ = member.Network.Peers() }()
+		go func() { defer wg.Done(); member.handleCommand("/say concurrent-chat"); _ = member.Network.Peers() }()
 	}
 	wg.Wait()
-	eventually(t, func() bool { return score(restricted, member.userIDHex()) == 8 })
+	eventually(t, func() bool { return strings.Contains(ui.text(), "concurrent-chat") })
 	if err := member.Network.Disconnect(restricted.Network.PeerID()); err != nil {
 		t.Fatal(err)
 	}
@@ -226,17 +159,6 @@ func TestParkMembershipIsolationAndConcurrentLifecycle(t *testing.T) {
 	l.Close()
 	if err := member.Start(); err != engine.ErrClosed {
 		t.Fatal(err)
-	}
-}
-
-func TestGrantSyncBatchFitsEngineLimit(t *testing.T) {
-	gs := make([]proto.QuizGrant, grantSyncLimit)
-	for i := range gs {
-		gs[i] = proto.QuizGrant{GrantID: strings.Repeat("f", 32), QuizID: strings.Repeat("f", 32), GrantorID: strings.Repeat("f", 64), RecipientID: strings.Repeat("f", 64), Points: 1_000_000_000, Timestamp: time.Now().Unix(), Signature: make([]byte, 64)}
-	}
-	b, err := json.Marshal(proto.GrantSyncResponse{Grants: gs})
-	if err != nil || len(b) > engine.MaxMessageSize {
-		t.Fatal("bounded batch exceeds API cap", len(b), err)
 	}
 }
 
@@ -291,7 +213,13 @@ func TestParkEncryptedChannelIsolationAndLongNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.net.broadcast("encrypted", proto.EncryptedMessage{Channel: "other", Nonce: nonce, Ciphertext: ct})
+	body, err := json.Marshal(proto.EncryptedMessage{Channel: "other", Nonce: nonce, Ciphertext: ct})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.net.publish("encrypted", body); err != nil {
+		t.Fatal(err)
+	}
 	time.Sleep(50 * time.Millisecond)
 	if strings.Contains(ui.text(), "cross-channel-forgery") {
 		t.Fatal("channel label bypassed AEAD associated data")

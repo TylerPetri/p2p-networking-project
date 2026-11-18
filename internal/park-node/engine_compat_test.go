@@ -12,7 +12,7 @@ import (
 
 func TestEngineAndParkFailClosedAcrossNetworks(t *testing.T) {
 	t.Setenv("P2P_PARK_DATA_DIR", t.TempDir())
-	app, err := New(Config{Name: "park", Bind: "127.0.0.1:0", DataDir: t.TempDir(), DisableLAN: true}, log.New(io.Discard, "", 0))
+	app, err := New(Config{Name: "park", Bind: "127.0.0.1:0", DiscoveryStateDir: t.TempDir(), DisableLAN: true}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}

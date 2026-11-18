@@ -144,7 +144,7 @@ Restricted membership is a static local allowlist, not enterprise authorization,
 revocation, human identity or Sybil resistance. Network IDs and recipient fields
 are signed, but open members can generate arbitrary new valid messages. Use
 application encryption/authorization where needed, with a separate design review.
-Park's shared-key channel UI remains in the game, outside this initial API.
+Park's shared-key channel UI lives in the reference CLI, outside this initial API.
 
 See [architecture and extraction decisions](../docs/ENGINE_ARCHITECTURE.md) and
 [SECURITY.md](../SECURITY.md). This protocol is experimental and has not been
@@ -154,14 +154,12 @@ independently security-audited.
 
 `Identity` implements standard `crypto.Signer`: `Public()` returns a copied
 Ed25519 public key; `Sign(rand.Reader, canonicalBytes, crypto.Hash(0))` signs an
-application record without exposing private-key bytes. Unsupported hash/options are rejected by the standard library; the existing
-game formats use Hash(0). Applications own canonicalization and authority.
+application record without exposing private-key bytes. Unsupported hash/options are rejected by the standard library. Applications own canonicalization and authority.
 Signing is safe concurrently for immutable identities and is independent of a
 particular engine lifecycle. This local capability must not be exposed as an
 unrestricted remote signing service.
 
-Park uses this capability to preserve existing points/quiz/grant signatures and
-uses engine topics for all networking. See the [Phase 2 adapter design](../docs/PHASE2_ENGINE_ADAPTER.md).
+Park uses engine topics for chat and shared-key channels. See [release readiness](../docs/RELEASE_READINESS.md) for the intended application boundaries.
 `EventDiscoveryError` / `Event.Error` report LAN responder startup errors without
 failing TCP startup. Optional LAN workers are joined on Close; discovery collection
 has a bounded one-second window. LAN and explicit stores retain the existing

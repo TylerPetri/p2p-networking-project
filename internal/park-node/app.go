@@ -8,16 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"crypto/ed25519"
 	"p2p-park/engine"
-	"p2p-park/internal/app/grants"
-	"p2p-park/internal/app/points"
-	"p2p-park/internal/app/quiz"
 	"p2p-park/internal/appdata"
 	"p2p-park/internal/crypto/channel"
-	proto "p2p-park/internal/gameproto"
-	"p2p-park/internal/paths"
-	"p2p-park/internal/storage/grantsbolt"
 	"p2p-park/internal/telemetry"
 )
 
@@ -38,16 +31,6 @@ type App struct {
 	closed   bool
 
 	stopOnce sync.Once
-
-	// Points engine
-	Points *points.Engine
-
-	// Grant-based scoring (quiz awards)
-	Ledger     *grants.Ledger
-	GrantStore grants.Store
-
-	// Quiz engine
-	Quiz *quiz.Engine
 
 	// Encrypted channels
 	encMu       sync.RWMutex
@@ -74,43 +57,14 @@ func New(cfg Config, logger *log.Logger) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	pub := ed25519.PublicKey(identity.SigningPublicKey())
-	pe := points.NewEngineWithSigner(cfg.Name, identity, pub)
-	qe := quiz.NewEngineWithSigner(cfg.Name, identity, pub)
-	ld := grants.NewLedger()
-
-	// Persistent grant store (BoltDB)
-	dataDir := cfg.DataDir
-	if dataDir == "" {
-		dataDir = paths.DefaultDataDir()
-	}
-	if dir, err := paths.EnsureDir(dataDir); err == nil {
-		dataDir = dir
-	}
-	dbPath := filepath.Join(dataDir, "grants.bolt")
-	gs, err := grantsbolt.Open(dbPath)
-	if err != nil {
-		_ = n.Close()
-		return nil, err
-	}
-	// Replay persisted grants into the in-memory ledger.
-	_ = gs.LoadAll(func(g proto.QuizGrant) error {
-		ld.ApplyGrant(g)
-		return nil
-	})
-	ld.NoteName(identity.SigningID(), cfg.Name)
-
 	return &App{
-		cfg:         cfg,
-		logger:      logger,
-		ui:          NewStdPrinter(os.Stdout),
-		Network:     n,
-		net:         &parkNetwork{engine: n},
-		identity:    identity,
-		Points:      pe,
-		Quiz:        qe,
-		Ledger:      ld,
-		GrantStore:  gs,
+		cfg:      cfg,
+		logger:   logger,
+		ui:       NewStdPrinter(os.Stdout),
+		Network:  n,
+		net:      &parkNetwork{engine: n},
+		identity: identity,
+
 		encChannels: make(map[string]channel.ChannelKey),
 	}, nil
 }
@@ -133,9 +87,6 @@ func (a *App) Start() error {
 	a.started = true
 	a.work.Add(1)
 	go func() { defer a.work.Done(); a.serve() }()
-	if snap, err := a.Points.SnapshotSelf(); err == nil {
-		a.broadcastPoints(snap)
-	}
 	return nil
 }
 
@@ -163,10 +114,6 @@ func (a *App) serve() {
 			switch ev.Type {
 			case engine.EventPeerConnected:
 				a.ui.Printf("[NET] peer connected: %s (%s)\n", ev.Peer.Name, ev.Peer.Address)
-				a.initiateGrantSync(ev.Peer.ID)
-				if snap, err := a.Points.SnapshotSelf(); err == nil {
-					a.broadcastPoints(snap)
-				}
 			case engine.EventDiscoveryError:
 				a.logf("LAN discovery: %s", ev.Error)
 			case engine.EventPeerDisconnected:
@@ -187,9 +134,6 @@ func (a *App) StopAll() {
 		a.lifeMu.Unlock()
 		_ = a.Network.Close()
 		a.work.Wait()
-		if a.GrantStore != nil {
-			_ = a.GrantStore.Close()
-		}
 	})
 }
 
@@ -201,8 +145,7 @@ func (a *App) logf(format string, args ...any) {
 	log.Printf(format+"\n", args...)
 }
 
-func (a *App) broadcastPoints(snap proto.SignedPointsSnapshot) { a.net.broadcast("points", snap) }
-func (a *App) userIDHex() string                               { return a.identity.SigningID() }
+func (a *App) userIDHex() string { return a.identity.SigningID() }
 
 // For “settle” waits after quit
 func sleepBrief() { time.Sleep(100 * time.Millisecond) }

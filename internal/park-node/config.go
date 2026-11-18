@@ -8,10 +8,10 @@ type Config struct {
 	Admission     engine.Admission
 	ApprovedPeers map[string]string
 
-	PeerPins          map[string]string
-	DiscoveryCIDRs    []string
-	DisableLAN        bool
-	DataDir           string
+	PeerPins       map[string]string
+	DiscoveryCIDRs []string
+	DisableLAN     bool
+
 	DiscoveryStateDir string
 	Name              string
 	Bind              string

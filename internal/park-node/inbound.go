@@ -12,18 +12,8 @@ import (
 
 func (a *App) handleMessage(m engine.Message) {
 	switch m.Topic {
-	case "grants.summary":
-		a.handleGrantSyncSummary(m)
-	case "grants.request":
-		a.handleGrantSyncRequest(m)
-	case "grants.response":
-		a.handleGrantSyncResponse(m)
 	case "global":
 		a.handleGlobalChat(m)
-	case "points":
-		a.handlePoints(m)
-	case "quiz":
-		a.handleQuiz(m)
 	case "encrypted":
 		a.handleEncrypted(m)
 	}
@@ -48,106 +38,6 @@ func (a *App) handleGlobalChat(m engine.Message) {
 	colored := formatName(sender, hex.EncodeToString(m.SigningKey))
 
 	a.ui.Printf("%s[%s]%s %s: %s\n", ansiDim, ts, ansiReset, colored, chat.Text)
-}
-
-func (a *App) handlePoints(m engine.Message) {
-	var signed proto.SignedPointsSnapshot
-	if err := json.Unmarshal(m.Data, &signed); err != nil {
-		a.ui.Printf("[POINTS] bad snapshot: %v\n", err)
-		return
-	}
-	_ = a.Points.ApplyRemote(signed)
-}
-
-func (a *App) handleQuiz(m engine.Message) {
-	var qw proto.QuizWire
-	if err := json.Unmarshal(m.Data, &qw); err != nil {
-		a.ui.Printf("[QUIZ] bad payload: %v\n", err)
-		return
-	}
-
-	switch qw.Kind {
-	case "open":
-		if qw.Open == nil {
-			return
-		}
-		if a.Quiz.ObserveOpen(*qw.Open) {
-			// Best-effort name learning
-			creator := qw.Open.Open.CreatorID
-			a.Ledger.NoteName(creator, a.net.displayName(creator))
-			a.ui.Printf("[QUIZ] open %s (%d pts): %s\n", shortID(qw.Open.Open.QuizID), qw.Open.Open.Points, qw.Open.Open.Question)
-		}
-
-	case "answer":
-		if qw.Answer == nil {
-			return
-		}
-		ans := *qw.Answer
-
-		answererUserID := hex.EncodeToString(m.SigningKey)
-		if answererUserID == "" {
-			return
-		}
-
-		grant, correct, authoritative, already := a.Quiz.TryGrade(ans.QuizID, answererUserID, ans.Answer)
-		_ = already
-		if !authoritative {
-			return
-		}
-
-		if correct && !a.acceptGrant(grant) {
-			a.logf("issued grant could not be persisted; not broadcasting")
-			return
-		}
-		// Direct UX result is authenticated by the engine gossip signature.
-		res := proto.QuizResult{QuizID: ans.QuizID, PlayerID: answererUserID, Correct: correct, Delta: 0}
-		if correct {
-			res.Delta = grant.Points
-		}
-		resWire := proto.QuizWire{Kind: "result", Result: &res}
-		resBody, _ := json.Marshal(resWire)
-		_ = a.net.reply(m, "quiz", resBody)
-
-		if correct {
-			grantWire := proto.QuizWire{Kind: "grant", Grant: &grant}
-			grantBody, _ := json.Marshal(grantWire)
-			_ = a.net.publish("quiz", grantBody)
-		}
-
-	case "grant":
-		if qw.Grant == nil {
-			return
-		}
-		g := *qw.Grant
-
-		if a.acceptGrant(g) {
-
-			wire := proto.QuizWire{Kind: "grant", Grant: &g}
-			body, _ := json.Marshal(wire)
-			_ = a.net.publish("quiz", body)
-
-			// announce if it's about us
-			if g.RecipientID == a.userIDHex() {
-				a.ui.Printf("[POINTS] +%d (quiz grant) => total %d\n", g.Points, a.Ledger.Total(g.RecipientID))
-			}
-		}
-
-	case "result":
-		if qw.Result == nil {
-			return
-		}
-		if !a.Quiz.IsCreator(qw.Result.QuizID, hex.EncodeToString(m.SigningKey)) {
-			return
-		}
-		if qw.Result.PlayerID != a.userIDHex() {
-			return
-		}
-		if qw.Result.Correct {
-			a.ui.Printf("[QUIZ] correct! +%d points (quiz %s)\n", qw.Result.Delta, shortID(qw.Result.QuizID))
-		} else {
-			a.ui.Printf("[QUIZ] incorrect (quiz %s)\n", shortID(qw.Result.QuizID))
-		}
-	}
 }
 
 func (a *App) handleEncrypted(m engine.Message) {
