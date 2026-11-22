@@ -1,6 +1,6 @@
 package engine
 
-import "p2p-park/internal/discovery"
+import "github.com/TylerPetri/p2p-networking-project/internal/discovery"
 
 // Optional LAN workers reuse the existing discovery implementation. Untrusted
 // advertisements still enter the core's scoped dialing and admission path.

@@ -6,8 +6,8 @@ import (
 	"sort"
 	"testing"
 
-	"p2p-park/internal/dht"
-	sim "p2p-park/internal/dht/sim"
+	"github.com/TylerPetri/p2p-networking-project/internal/dht"
+	sim "github.com/TylerPetri/p2p-networking-project/internal/dht/sim"
 )
 
 func randPeerID(t *testing.T) string {

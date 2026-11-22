@@ -3,8 +3,8 @@ package p2p
 import (
 	"encoding/hex"
 	"encoding/json"
-	"p2p-park/internal/netx"
-	proto "p2p-park/internal/wire"
+	"github.com/TylerPetri/p2p-networking-project/internal/netx"
+	proto "github.com/TylerPetri/p2p-networking-project/internal/wire"
 	"time"
 )
 

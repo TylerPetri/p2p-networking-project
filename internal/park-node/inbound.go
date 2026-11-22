@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"p2p-park/engine"
-	"p2p-park/internal/crypto/channel"
-	proto "p2p-park/internal/gameproto"
+	"github.com/TylerPetri/p2p-networking-project/engine"
+	"github.com/TylerPetri/p2p-networking-project/internal/crypto/channel"
+	proto "github.com/TylerPetri/p2p-networking-project/internal/gameproto"
 )
 
 func (a *App) handleMessage(m engine.Message) {

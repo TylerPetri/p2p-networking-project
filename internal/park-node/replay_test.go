@@ -1,7 +1,7 @@
 package parknode
 
 import (
-	"p2p-park/internal/crypto/channel"
+	"github.com/TylerPetri/p2p-networking-project/internal/crypto/channel"
 	"testing"
 )
 

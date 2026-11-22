@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	proto "p2p-park/internal/wire"
+	proto "github.com/TylerPetri/p2p-networking-project/internal/wire"
 )
 
 func (d *DHT) HandleDHT(n Sender, fromPeerID string, fromAddr string, fromName string, env proto.Envelope) {

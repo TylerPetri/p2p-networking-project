@@ -1,6 +1,6 @@
 package discovery
 
-import "p2p-park/internal/p2p"
+import "github.com/TylerPetri/p2p-networking-project/internal/p2p"
 
 var DefaultSeeds = []string{
 	// "seed1.p2p-park.net:4001",
