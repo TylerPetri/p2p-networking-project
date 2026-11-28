@@ -33,6 +33,13 @@ jobs:
       - run: go run ./examples/echo
       - run: python3 scripts/demo.py
       - run: python3 scripts/check_netcheck.py
+      - run: make net-ci NET_REPORT=/tmp/netlab-ci.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: netlab-summary
+          path: /tmp/netlab-ci.json
+          if-no-files-found: warn
       - name: Scan reachable Git history for secrets
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.24.3

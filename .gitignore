@@ -35,3 +35,7 @@ go.work.sum
 
 # Local app state (self-contained data dir)
 .p2p-park/
+# Private diagnostic identities, binaries and local reports
+.netlab/
+__pycache__/
+*.pyc
