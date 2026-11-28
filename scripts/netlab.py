@@ -102,7 +102,7 @@ class Node:
         address = bind or cfg.bind
         command = [self.binary, "-state", str(self.state), "-bind", address,
                    "-duration", f"{cfg.duration}s", "-probe-timeout", f"{cfg.timeout}s",
-                   "-join-timeout", f"{cfg.timeout}s", "-allow-cidrs", cfg.allow,
+                   "-join-timeout", f"{cfg.join_timeout}s", "-allow-cidrs", cfg.allow,
                    "-discover-cidrs", cfg.discover,
                    "-drop-every", str(cfg.drop_every if drop_every is None else drop_every),
                    "-response-delay", cfg.response_delay if response_delay is None else response_delay]
@@ -144,7 +144,7 @@ class Node:
             thread = threading.Thread(target=collect, args=(pipe, stream), daemon=True)
             thread.start()
             self.threads.append(thread)
-        self.ready = self.wait({"ready"}, cfg.timeout + 3)
+        self.ready = self.wait({"ready"}, cfg.join_timeout + 3)
         return self.ready
 
     def send(self, command):
@@ -159,7 +159,7 @@ class Node:
             raise Failure(str(error)) from error
 
     def wait(self, kinds, timeout, nonce=None, errors=True):
-        deadline = time.monotonic() + timeout
+        deadline = min(time.monotonic() + timeout, getattr(self.config,"deadline",float("inf")))
         while time.monotonic() < deadline:
             if STOP.is_set():
                 raise Failure("cancelled")
@@ -185,7 +185,7 @@ class Node:
         budget.take()
         self.report["join_attempts"] += 1
         self.send("join " + link)
-        result = self.wait({"joined"}, self.config.timeout + 2)
+        result = self.wait({"joined"}, self.config.join_timeout + 2)
         self.report["join_failures"] += len(result.get("failures", []))
 
     def stop(self, crash=False):
@@ -333,7 +333,7 @@ def run_profile(cfg):
               "faults": [], "checks": [], "failures": [], "rtt_ms": [], "nodes": [],
               "media": "NOT_RUN", "physical_cross_host_verification": "NOT_RUN",
               "limits": {"attempts": cfg.attempts, "restarts_per_node": cfg.restarts, "rate_per_second": cfg.rate,
-                         "duration_seconds": cfg.duration, "nodes": cfg.nodes, "count": cfg.count}}
+                         "duration_seconds": cfg.duration,"join_timeout_seconds":cfg.join_timeout, "nodes": cfg.nodes, "count": cfg.count}}
     report["commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     report["toolchain"] = subprocess.check_output([(os.environ.get("GO") or "go"), "version"], text=True).strip()
     report["dirty"] = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True).strip())
@@ -352,6 +352,7 @@ def run_profile(cfg):
     try:
         build(binary, cfg.race)
         budget = Budget(cfg.rate, cfg.duration)
+        cfg.deadline = budget.deadline
         if cfg.mode in ("remote", "attach"):
             report["scope"] = ("operator-run non-loopback endpoint probes; physical host separation requires owner evidence" if cfg.mode == "remote" else "borrowed localhost seed; same-link owned client processes")
             first = Node(binary, root / "client-0", cfg, report)
@@ -465,6 +466,7 @@ def terminal(cfg):
     try:
         node = Node(binary, state, cfg, counters)
         budget = Budget(cfg.rate,cfg.duration)
+        cfg.deadline = budget.deadline
         ready = start_retry(node,cfg.link,budget)
         print("LINK=" + ready["invitation"], flush=True)
         print("Commands: peers | ping | join | probe PEER SIGNER | disconnect PEER | quit", flush=True)
@@ -547,6 +549,7 @@ def options(argv=None):
     parser.add_argument("--attempts", type=int, default=int((os.getenv("ATTEMPTS") or "3")))
     parser.add_argument("--restarts", type=int, default=int((os.getenv("RESTARTS") or "3")))
     parser.add_argument("--timeout", type=int, default=int((os.getenv("TIMEOUT") or "2")))
+    parser.add_argument("--join-timeout", type=int, default=int(os.getenv("JOIN_TIMEOUT") or "22"))
     parser.add_argument("--duration", type=int, default=int(os.getenv("DURATION")) if os.getenv("DURATION") else None)
     parser.add_argument("--race", action="store_true", default=(os.getenv("RACE") or "1") == "1")
     parser.add_argument("--nonlocal-bind", action="store_true", default=os.getenv("ACK_NONLOCAL", "0") == "1")
@@ -557,7 +560,7 @@ def options(argv=None):
     if cfg.duration is None: cfg.duration = 3600 if cfg.mode in ("host","join") else 180
     if cfg.allow is None: cfg.allow = "" if cfg.mode == "remote" else "127.0.0.1/32"
     limits = (("port", 0, 65535), ("nodes", 2, 8), ("count", 1, 10000), ("rate", 1, 20),
-              ("attempts", 1, 5), ("restarts", 0, 10), ("timeout", 1, 10), ("duration", 10, 3600), ("drop_every", 0, 10000))
+              ("attempts", 1, 5), ("restarts", 0, 10), ("timeout", 1, 10), ("join_timeout",1,30), ("duration", 10, 3600), ("drop_every", 0, 10000))
     for name, low, high in limits:
         if not low <= getattr(cfg, name) <= high:
             parser.error(f"{name} must be {low}..{high}")

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/TylerPetri/p2p-networking-project/engine"
 	"io"
 	"net"
@@ -140,4 +142,99 @@ func TestQuitCancelsOutstandingDiagnosticJoin(t *testing.T) {
 		t.Fatal("listener leaked", err)
 	}
 	_ = rebound.Close()
+}
+
+func TestDiagnosticMultiBootstrapJoinTimeout(t *testing.T) {
+	first, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		_ = first.Close()
+		t.Fatal(err)
+	}
+	if first.Addr().String() > second.Addr().String() {
+		first, second = second, first
+	}
+	defer first.Close()
+	healthyAddress := second.Addr().String()
+	_ = second.Close()
+	accepted := make(chan net.Conn, 2)
+	acceptDone := make(chan struct{})
+	go func() {
+		defer close(acceptDone)
+		for i := 0; i < 2; i++ {
+			conn, err := first.Accept()
+			if err != nil {
+				return
+			}
+			accepted <- conn
+		}
+	}()
+	defer func() {
+		_ = first.Close()
+		<-acceptDone
+		for {
+			select {
+			case conn := <-accepted:
+				_ = conn.Close()
+			default:
+				return
+			}
+		}
+	}()
+	network, err := engine.NewNetworkID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := engine.New(engine.Config{NetworkID: network, Application: "engine-netcheck.0.1.0", Bind: healthyAddress})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	if err = server.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	invitation, err := server.Invitation(nil, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stalled := invitation.Bootstraps[0]
+	stalled.Address = first.Addr().String()
+	invitation.Bootstraps = append([]engine.BootstrapPeer{stalled}, invitation.Bootstraps...)
+	uri, err := invitation.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name    string
+		budget  time.Duration
+		success bool
+	}{
+		{"too-small-global-budget", 200 * time.Millisecond, false},
+		{"slow-first-healthy-fallback", 7 * time.Second, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var output bytes.Buffer
+			err := run(context.Background(), config{state: t.TempDir(), bind: "127.0.0.1:0", link: uri, allow: "127.0.0.1/32", duration: 15 * time.Second, probeTimeout: time.Second, joinTimeout: test.budget}, strings.NewReader("quit\n"), &output)
+			if !test.success {
+				if !errors.Is(err, context.DeadlineExceeded) {
+					t.Fatal("join budget not enforced", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal("healthy fallback unreachable after slow endpoint", err)
+			}
+			var ready struct {
+				Event    string                                     `json:"event"`
+				Failures []string                                   `json:"join_failures"`
+				Joined   struct{ Connected []engine.BootstrapPeer } `json:"joined"`
+			}
+			if err = json.NewDecoder(&output).Decode(&ready); err != nil || ready.Event != "ready" || len(ready.Failures) != 1 || len(ready.Joined.Connected) != 1 {
+				t.Fatal("partial join evidence missing", ready, err)
+			}
+		})
+	}
 }

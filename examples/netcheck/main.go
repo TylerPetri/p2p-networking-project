@@ -55,7 +55,7 @@ func main() {
 	flag.StringVar(&c.network, "network", "", "expected overlay ID; otherwise use saved state or invitation")
 	flag.StringVar(&c.invite, "invite", "", "trusted invitation text file; no HTTP fetching")
 	flag.StringVar(&c.link, "link", "", "trusted invitation URI; mutually exclusive with -invite")
-	flag.DurationVar(&c.joinTimeout, "join-timeout", 5*time.Second, "one bounded join attempt (100ms..30s)")
+	flag.DurationVar(&c.joinTimeout, "join-timeout", 30*time.Second, "one bounded join attempt (100ms..30s)")
 	flag.DurationVar(&c.responseDelay, "response-delay", 0, "TEST ONLY: bounded pong delay (0..2s), not transport latency")
 	flag.IntVar(&c.dropEvery, "drop-every", 0, "TEST ONLY: omit every Nth pong (0 disables, 1..10000)")
 	flag.StringVar(&c.allow, "allow-cidrs", "", "local approval for invitation private/loopback destinations")
@@ -111,7 +111,7 @@ func run(parent context.Context, c config, input io.Reader, output io.Writer) er
 		return errors.New("invalid state directory, duration (0..1h) or probe timeout (1s..30s)")
 	}
 	if c.joinTimeout == 0 {
-		c.joinTimeout = 5 * time.Second
+		c.joinTimeout = 30 * time.Second
 	}
 	if c.joinTimeout < 100*time.Millisecond || c.joinTimeout > 30*time.Second || c.responseDelay < 0 || c.responseDelay > 2*time.Second || c.dropEvery < 0 || c.dropEvery > 10000 {
 		return errors.New("invalid join/fault bounds")

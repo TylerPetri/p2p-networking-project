@@ -80,7 +80,7 @@ class ControllerTests(unittest.TestCase):
                 netlab.options(["remote", "--link", "p2p://invite/abc"])
 
     def test_bad_limits_and_nonloopback_bind_fail_closed(self):
-        cases = [["local", "--attempts", "6"], ["local", "--nodes", "100"],
+        cases = [["local", "--join-timeout", "31"], ["local", "--attempts", "6"], ["local", "--nodes", "100"],
                  ["local", "--rate", "999"], ["local", "--duration", "0"],
                  ["host", "--bind", "0.0.0.0:45001"],
                  ["host", "--bind", "192.168.1.3:45001"],
@@ -98,6 +98,7 @@ class ControllerTests(unittest.TestCase):
             cfg = netlab.options(["local"])
         self.assertEqual((cfg.attempts, cfg.restarts, cfg.rate, cfg.duration), (3, 3, 5, 180))
         self.assertEqual(cfg.bind, "127.0.0.1:0")
+        self.assertEqual(cfg.join_timeout,22)
         self.assertTrue(cfg.race)
 
 

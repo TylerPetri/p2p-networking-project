@@ -144,7 +144,8 @@ durations. Operation duration includes pacing, backoff and repair; the Go
 | `RATE` | 5; 1..20 controller requests/second shared across clients and repairs |
 | `ATTEMPTS` | 3; 1..5 per idempotent diagnostic operation/startup |
 | `RESTARTS` | 3; 0..10 planned restarts per owned node |
-| `TIMEOUT` | 2; 1..10 seconds per probe/join attempt |
+| `TIMEOUT` | 2; 1..10 seconds per probe attempt |
+| `JOIN_TIMEOUT` | 22; 1..30 seconds for one full invitation join; core attempts retain their existing five-second cap |
 | `DURATION` | 180 automatic / 3600 terminal; 10..3600 seconds |
 | `SOAK_ROUNDS` | 20 for full-suite qualification; 1..1000 |
 | `FUZZ_SECONDS` | 5 per target in full suite; 1..60 |
@@ -166,6 +167,10 @@ Latency samples cap at 10000 and record truncation; summaries include retry and
 first-failure counts. No unbounded worker-per-packet, unbounded retry loop or
 queue growth is added.
 These controls apply to this controller; they are not an engine-wide rate promise.
+Probes are paced sequentially across owned clients, making counters/retry outcomes
+reproducible rather than claiming a saturation benchmark. The full suite separately
+runs the existing concurrent API/session tests. Separate terminals/controllers can
+exercise concurrent traffic, each with its own explicit budget.
 Only idempotent probes are automatically resent. State-changing actions need the
 separate stable-ID/acknowledgement/reconciliation model in
 [RELIABILITY_QUALIFICATION.md](RELIABILITY_QUALIFICATION.md).
@@ -176,12 +181,23 @@ and explicitly count truncated lines. A restart cycle may use at most ATTEMPTS
 startup attempts; total process starts are bounded by NODES * ATTEMPTS *
 (1 + RESTARTS) and the duration budget. All attempts remain in the report. Observation queue overflow fails the run.
 Startup/operation retries, process lifetime and suite phases all have deadlines.
+JOIN_TIMEOUT allows all four bounded bootstrap alternatives by default; reducing
+it can end a join before later alternatives are tried. The controller also stops
+waiting when its overall run deadline expires.
 Process locks survive into owned Go children, preventing concurrent reuse of a
 live node's private state. Terminal EOF, quit, Ctrl-C, duration and controller
 cleanup close owned processes; abrupt controller SIGKILL can leave its child
 until that child's bounded lifetime expires. No foreign PID is accepted as input.
 
 ## Actual other-host testing: same link, no automatic public deployment
+
+If you want one identical URI for both same-machine and other-machine terminals,
+create the host with its reachable LAN/VPN address from the beginning, as below.
+Same-machine joiners then use that same LAN URI and explicitly approve its /32
+in ALLOW_CIDRS. Use the non-loopback endpoint automation (net-remote /
+net-remote-all with ACK_REMOTE=1) for that URI even on the origin machine; the
+script still cannot infer physical host separation. A 127.0.0.1-only URI cannot
+be made cross-host merely by copying it.
 
 The link must advertise an endpoint reachable from the other machine. A link
 containing 127.0.0.1 refers to the receiving machine itself; it cannot cross hosts.
