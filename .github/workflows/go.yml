@@ -33,6 +33,13 @@ jobs:
       - run: go run ./examples/echo
       - run: python3 scripts/demo.py
       - run: python3 scripts/check_netcheck.py
+      - run: make net-ci NET_REPORT=/tmp/netlab-ci.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: netlab-summary
+          path: /tmp/netlab-ci.json
+          if-no-files-found: warn
       - name: Scan reachable Git history for secrets
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.24.3
@@ -62,6 +69,9 @@ jobs:
       - run: python3 scripts/check_external_consumer.py
       - run: go run ./examples/echo
       - run: python3 scripts/demo.py
+      - name: Network lab controller on macOS
+        if: matrix.os == 'macos-latest' && matrix.go == '1.27.x'
+        run: make net-ci NET_REPORT=/tmp/netlab-macos.json
   sdk-remote:
     # Only resolve commits actually pushed to the canonical repository.
     if: github.event_name == 'push' && github.repository == 'TylerPetri/p2p-networking-project'

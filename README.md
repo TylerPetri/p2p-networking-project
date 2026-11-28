@@ -308,3 +308,25 @@ This explicit command currently exits nonzero: receiver-pressure feedback is
 waive those requirements. Longer bounded churn is opt-in; see the guide and
 [future streaming matrix](docs/STREAMING_QUALIFICATION.md). No production
 readiness, independent audit, media playback or WAN qualification is claimed.
+
+## Multi-terminal network lab
+
+```sh
+# Terminal 1: prints a public invitation link
+make net-host PORT=45001
+# Terminal 2/3: paste that same full link; use distinct ports
+make net-join PORT=45002 LINK='p2p://invite/...'
+make net-join PORT=45003 LINK='p2p://invite/...'
+# Type peers, then ping. Automated tests against the same borrowed host:
+make net-attach LINK='p2p://invite/...'
+# Full regression/stress/chaos/E2E and explicit qualification reports:
+make net-all LINK='p2p://invite/...' NET_REPORT=.netlab/all.json
+```
+
+[The network-lab guide](docs/NETWORK_LAB.md) covers bounded retry/backoff/rate
+settings, process crashes, persistent identities, owned seed loss, delayed/lost
+responses, cleanup and remote-host Make commands. Cross-host links need reachable
+bind/advertised addresses and owner-approved firewall/CIDR scopes. No private key
+is shared. `net-all` keeps failed qualification gates and NOT RUN media rows
+visible and currently exits nonzero; a successful recovered ping is not an engine
+delivery guarantee or production certification.

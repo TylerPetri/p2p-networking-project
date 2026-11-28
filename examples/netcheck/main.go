@@ -17,6 +17,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -24,9 +25,19 @@ import (
 )
 
 type config struct {
-	state, bind, advertise, network, invite, allow, discovery string
-	nonloopback                                               bool
-	duration, probeTimeout                                    time.Duration
+	state, bind, advertise, network, invite, link, allow, discovery string
+	nonloopback                                                     bool
+	duration, probeTimeout, joinTimeout, responseDelay              time.Duration
+	dropEvery                                                       int
+}
+type delayedReply struct {
+	peer, signer, nonce string
+	data                []byte
+	due                 time.Time
+}
+type joinOutcome struct {
+	result engine.JoinResult
+	err    error
 }
 type pendingProbe struct {
 	signer   string
@@ -43,6 +54,10 @@ func main() {
 	flag.StringVar(&c.advertise, "advertise", "", "optional reachable numeric endpoint (no automatic NAT mapping)")
 	flag.StringVar(&c.network, "network", "", "expected overlay ID; otherwise use saved state or invitation")
 	flag.StringVar(&c.invite, "invite", "", "trusted invitation text file; no HTTP fetching")
+	flag.StringVar(&c.link, "link", "", "trusted invitation URI; mutually exclusive with -invite")
+	flag.DurationVar(&c.joinTimeout, "join-timeout", 30*time.Second, "one bounded join attempt (100ms..30s)")
+	flag.DurationVar(&c.responseDelay, "response-delay", 0, "TEST ONLY: bounded pong delay (0..2s), not transport latency")
+	flag.IntVar(&c.dropEvery, "drop-every", 0, "TEST ONLY: omit every Nth pong (0 disables, 1..10000)")
 	flag.StringVar(&c.allow, "allow-cidrs", "", "local approval for invitation private/loopback destinations")
 	flag.StringVar(&c.discovery, "discover-cidrs", "", "additional approved numeric referral scopes")
 	flag.BoolVar(&c.nonloopback, "allow-nonloopback", false, "owner explicitly authorizes binding this non-loopback host/port")
@@ -95,11 +110,24 @@ func run(parent context.Context, c config, input io.Reader, output io.Writer) er
 	if c.state == "" || c.duration <= 0 || c.duration > time.Hour || c.probeTimeout < time.Second || c.probeTimeout > 30*time.Second {
 		return errors.New("invalid state directory, duration (0..1h) or probe timeout (1s..30s)")
 	}
+	if c.joinTimeout == 0 {
+		c.joinTimeout = 30 * time.Second
+	}
+	if c.joinTimeout < 100*time.Millisecond || c.joinTimeout > 30*time.Second || c.responseDelay < 0 || c.responseDelay > 2*time.Second || c.dropEvery < 0 || c.dropEvery > 10000 {
+		return errors.New("invalid join/fault bounds")
+	}
+	if c.invite != "" && c.link != "" {
+		return errors.New("choose -link or -invite, not both")
+	}
 	var imported *engine.Invitation
-	if c.invite != "" {
-		text, err := readText(c.invite, engine.MaxInvitationSize+1)
-		if err != nil {
-			return err
+	if c.invite != "" || c.link != "" {
+		text := c.link
+		if c.invite != "" {
+			var err error
+			text, err = readText(c.invite, engine.MaxInvitationSize+1)
+			if err != nil {
+				return err
+			}
 		}
 		i, err := engine.ParseInvitation(text)
 		if err != nil {
@@ -164,7 +192,9 @@ func run(parent context.Context, c config, input io.Reader, output io.Writer) er
 	}
 	var joined *engine.JoinResult
 	if imported != nil {
-		result, err := n.Join(ctx, *imported, engine.JoinOptions{AllowedCIDRs: split(c.allow)})
+		attempt, stop := context.WithTimeout(ctx, c.joinTimeout)
+		result, err := n.Join(attempt, *imported, engine.JoinOptions{AllowedCIDRs: split(c.allow)})
+		stop()
 		if err != nil {
 			return err
 		}
@@ -215,9 +245,15 @@ func run(parent context.Context, c config, input io.Reader, output io.Writer) er
 		}
 	}()
 	pending := map[string]pendingProbe{}
+	var replies []delayedReply
+	var pingCount uint64
+	joinResults := make(chan joinOutcome, 1)
+	joining := false
+	var joins sync.WaitGroup
+	defer func() { cancel(); joins.Wait() }()
 	tick := time.NewTicker(100 * time.Millisecond)
 	defer tick.Stop()
-	sendProbe := func(peer, signer string) {
+	sendProbe := func(peer, signer, suppliedNonce string) {
 		if !canonicalID(peer) || !canonicalID(signer) || len(pending) >= 16 {
 			emit("command_error", map[string]any{"error": "invalid IDs or pending-probe limit"})
 			return
@@ -238,6 +274,18 @@ func run(parent context.Context, c config, input io.Reader, output io.Writer) er
 			return
 		}
 		key := hex.EncodeToString(nonce[:])
+		if suppliedNonce != "" {
+			key = suppliedNonce
+		}
+		decoded, err := hex.DecodeString(key)
+		if err != nil || len(decoded) != 16 || hex.EncodeToString(decoded) != key {
+			emit("command_error", map[string]any{"error": "nonce must be 32 lowercase hex characters"})
+			return
+		}
+		if _, exists := pending[key]; exists {
+			emit("command_error", map[string]any{"error": "nonce already pending"})
+			return
+		}
 		body, _ := json.Marshal(probeBody{key})
 		if err := n.Send(ctx, peer, "probe.ping", body); err != nil {
 			emit("command_error", map[string]any{"error": err.Error()})
@@ -245,6 +293,19 @@ func run(parent context.Context, c config, input io.Reader, output io.Writer) er
 		}
 		pending[key] = pendingProbe{signer, time.Now().Add(c.probeTimeout)}
 		emit("probe_sent", map[string]any{"nonce": key, "peer_id": peer})
+	}
+	replyPong := func(reply delayedReply) {
+		for _, peer := range n.Peers() {
+			if peer.ID == reply.peer && peer.SigningID == reply.signer {
+				if err := n.Send(ctx, reply.peer, "probe.pong", reply.data); err != nil {
+					emit("probe_reply_failed", map[string]any{"nonce": reply.nonce, "error": err.Error()})
+				} else {
+					emit("probe_reply", map[string]any{"nonce": reply.nonce})
+				}
+				return
+			}
+		}
+		emit("probe_reply_failed", map[string]any{"nonce": reply.nonce, "error": "verified reply peer no longer connected"})
 	}
 	for {
 		select {
@@ -267,14 +328,59 @@ func run(parent context.Context, c config, input io.Reader, output io.Writer) er
 				return nil
 			case args[0] == "peers" && len(args) == 1:
 				emit("peers", map[string]any{"peers": n.Peers()})
-			case args[0] == "probe" && len(args) == 3:
-				sendProbe(args[1], args[2])
+			case args[0] == "probe" && (len(args) == 3 || len(args) == 4):
+				nonce := ""
+				if len(args) == 4 {
+					nonce = args[3]
+				}
+				sendProbe(args[1], args[2], nonce)
+			case args[0] == "join" && (len(args) == 1 || len(args) == 2):
+				if joining {
+					emit("command_error", map[string]any{"error": "join already pending"})
+					continue
+				}
+				var inv engine.Invitation
+				var parseErr error
+				if len(args) == 2 {
+					inv, parseErr = engine.ParseInvitation(args[1])
+				} else if imported != nil {
+					inv = *imported
+				} else {
+					parseErr = errors.New("no original invitation; supply join URI")
+				}
+				if parseErr != nil || inv.NetworkID != c.network {
+					emit("command_error", map[string]any{"error": "invalid or cross-network invitation"})
+					continue
+				}
+				joining = true
+				joins.Add(1)
+				go func(inv engine.Invitation) {
+					defer joins.Done()
+					attempt, stop := context.WithTimeout(ctx, c.joinTimeout)
+					defer stop()
+					result, err := n.Join(attempt, inv, engine.JoinOptions{AllowedCIDRs: split(c.allow)})
+					select {
+					case joinResults <- joinOutcome{result, err}:
+					case <-ctx.Done():
+					}
+				}(inv)
 			case args[0] == "disconnect" && len(args) == 2:
 				if err := n.Disconnect(args[1]); err != nil {
 					emit("command_error", map[string]any{"error": err.Error()})
 				}
 			default:
-				emit("command_error", map[string]any{"error": "commands: peers | probe PEER_ID SIGNING_ID | disconnect PEER_ID | quit"})
+				emit("command_error", map[string]any{"error": "commands: peers | probe PEER_ID SIGNING_ID [NONCE] | join [URI] | disconnect PEER_ID | quit"})
+			}
+		case outcome := <-joinResults:
+			joining = false
+			if outcome.err != nil {
+				emit("join_failed", map[string]any{"error": outcome.err.Error()})
+			} else {
+				failures := make([]string, 0, len(outcome.result.Failures))
+				for _, err := range outcome.result.Failures {
+					failures = append(failures, err.Error())
+				}
+				emit("joined", map[string]any{"connected": outcome.result.Connected, "failures": failures})
 			}
 		case event, ok := <-n.Events():
 			if !ok {
@@ -299,9 +405,23 @@ func run(parent context.Context, c config, input io.Reader, output io.Writer) er
 			signer := hex.EncodeToString(m.SigningKey)
 			switch m.Topic {
 			case "probe.ping":
+				pingCount++
+				if c.dropEvery > 0 && pingCount%uint64(c.dropEvery) == 0 {
+					emit("probe_drop", map[string]any{"nonce": body.Nonce, "reason": "injected_pong_loss"})
+					continue
+				}
+				if len(replies) >= 16 {
+					emit("probe_drop", map[string]any{"nonce": body.Nonce, "reason": "bounded_reply_queue_full"})
+					continue
+				}
 				for _, p := range n.Peers() {
 					if p.SigningID == signer {
-						_ = n.Send(ctx, p.ID, "probe.pong", m.Data)
+						reply := delayedReply{p.ID, signer, body.Nonce, append([]byte(nil), m.Data...), time.Now().Add(c.responseDelay)}
+						if c.responseDelay == 0 {
+							replyPong(reply)
+						} else {
+							replies = append(replies, reply)
+						}
 						break
 					}
 				}
@@ -312,6 +432,15 @@ func run(parent context.Context, c config, input io.Reader, output io.Writer) er
 				}
 			}
 		case now := <-tick.C:
+			remaining := replies[:0]
+			for _, reply := range replies {
+				if now.Before(reply.due) {
+					remaining = append(remaining, reply)
+					continue
+				}
+				replyPong(reply)
+			}
+			replies = remaining
 			for nonce, p := range pending {
 				if !now.Before(p.deadline) {
 					delete(pending, nonce)
